@@ -1,0 +1,27 @@
+[31m✗[39m Build failed in 368ms
+[31merror during build:
+[31mBuild failed with 1 error:
+
+[plugin @tailwindcss/vite:generate:build] C:/Users/RaviKumar/OneDrive - Default Directory/Desktop/interview-buddy/src/index.css
+Error: Cannot apply unknown utility class `text-foreground`
+    at onInvalidCandidate (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/tailwindcss@4.2.2/node_modules/tailwindcss/dist/chunk-F4544Y4M.mjs:21:1511)
+    at $e (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/tailwindcss@4.2.2/node_modules/tailwindcss/dist/chunk-F4544Y4M.mjs:16:37066)
+    at file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/tailwindcss@4.2.2/node_modules/tailwindcss/dist/chunk-F4544Y4M.mjs:21:355
+    at Cr (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/tailwindcss@4.2.2/node_modules/tailwindcss/dist/chunk-F4544Y4M.mjs:3:1733)
+    at _ (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/tailwindcss@4.2.2/node_modules/tailwindcss/dist/chunk-F4544Y4M.mjs:3:1377)
+    at Ce (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/tailwindcss@4.2.2/node_modules/tailwindcss/dist/chunk-F4544Y4M.mjs:21:172)
+    at Zi (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/tailwindcss@4.2.2/node_modules/tailwindcss/dist/chunk-F4544Y4M.mjs:38:294)
+    at async ua (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/tailwindcss@4.2.2/node_modules/tailwindcss/dist/chunk-F4544Y4M.mjs:38:631)
+    at async yf (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/tailwindcss@4.2.2/node_modules/tailwindcss/dist/chunk-F4544Y4M.mjs:38:1406)
+    at async uu (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/@tailwindcss+node@4.2.2/node_modules/@tailwindcss/node/dist/index.mjs:10:3457)[31m
+    at aggregateBindingErrorsIntoJsError (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/rolldown@1.0.0-rc.12_@emnap_604b41d6a2302d09cd8d83c23f9fe804/node_modules/rolldown/dist/shared/error-BLhcSyeg.mjs:48:18)
+    at unwrapBindingResult (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/rolldown@1.0.0-rc.12_@emnap_604b41d6a2302d09cd8d83c23f9fe804/node_modules/rolldown/dist/shared/error-BLhcSyeg.mjs:18:128)
+    at #build (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/rolldown@1.0.0-rc.12_@emnap_604b41d6a2302d09cd8d83c23f9fe804/node_modules/rolldown/dist/shared/rolldown-build-CPrIX9V6.mjs:3313:34)
+    at async buildEnvironment (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/vite@8.0.3_@emnapi+core@1.9_29c1327289da8919c9140ed8297e8af0/node_modules/vite/dist/node/chunks/node.js:32849:64)
+    at async Object.build (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/vite@8.0.3_@emnapi+core@1.9_29c1327289da8919c9140ed8297e8af0/node_modules/vite/dist/node/chunks/node.js:33271:19)
+    at async Object.buildApp (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/vite@8.0.3_@emnapi+core@1.9_29c1327289da8919c9140ed8297e8af0/node_modules/vite/dist/node/chunks/node.js:33268:153)
+    at async CAC.<anonymous> (file:///C:/Users/RaviKumar/OneDrive%20-%20Default%20Directory/Desktop/interview-buddy/node_modules/.pnpm/vite@8.0.3_@emnapi+core@1.9_29c1327289da8919c9140ed8297e8af0/node_modules/vite/dist/node/cli.js:778:3) {
+  errors: [Getter/Setter]
+}[39m
+\n[36mvite v8.0.3 [32mbuilding client environment for production...[36m[39m
+[2Ktransforming...✓ 2634 modules transformed.
