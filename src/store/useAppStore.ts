@@ -58,15 +58,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   setOpacity: async (opacity) => {
     set({ opacity });
+    window.electronAPI.storeSet('opacity', opacity);
     await window.electronAPI.setOpacity(opacity);
   },
 
   setAlwaysOnTop: async (enabled) => {
     set({ isAlwaysOnTop: enabled });
+    window.electronAPI.storeSet('isAlwaysOnTop', enabled);
     await window.electronAPI.toggleAlwaysOnTop(enabled);
   },
   
-  setCurrentProblem: (problem) => set({ currentProblem: problem }),
+  setCurrentProblem: (problem) => set({ currentProblem: problem, currentSolution: null }),
   
   setCurrentSolution: (solution) => set({ currentSolution: solution }),
   
@@ -94,9 +96,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   initStore: async () => {
     const key = await window.electronAPI.storeGet('apiKey', '');
     const th = await window.electronAPI.storeGet('theme', 'dark');
+    const opacity = await window.electronAPI.storeGet('opacity', 1.0);
+    const isAlwaysOnTop = await window.electronAPI.storeGet('isAlwaysOnTop', false);
     const hist = await window.electronAPI.storeGet('history', []);
     
-    set({ apiKey: key, theme: th, history: hist });
+    set({ apiKey: key, theme: th, opacity, isAlwaysOnTop, history: hist });
     document.documentElement.className = th;
+    await window.electronAPI.setOpacity(opacity);
+    await window.electronAPI.toggleAlwaysOnTop(isAlwaysOnTop);
   }
 }));

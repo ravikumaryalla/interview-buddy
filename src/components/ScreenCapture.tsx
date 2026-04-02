@@ -4,7 +4,7 @@ import { useAppStore } from '../store/useAppStore';
 import { extractTextFromImage } from '../lib/ocr';
 
 export const ScreenCapture: React.FC = () => {
-  const { setCurrentProblem } = useAppStore();
+  const { setCurrentProblem, setCurrentSolution } = useAppStore();
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -99,6 +99,7 @@ export const ScreenCapture: React.FC = () => {
         );
         const croppedBase64 = canvas.toDataURL('image/png');
         const text = await extractTextFromImage(croppedBase64);
+        setCurrentSolution(null);
         setCurrentProblem(text.trim());
         setScreenshotUrl(null); // clear after success
       }

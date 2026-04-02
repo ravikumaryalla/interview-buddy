@@ -14,6 +14,56 @@ export interface AISolution {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function validateAISolution(value: unknown): AISolution {
+  if (!isRecord(value)) {
+    throw new Error('AI response was not an object');
+  }
+
+  const { summary, approach, code, complexity } = value;
+
+  if (typeof summary !== 'string' || typeof approach !== 'string') {
+    throw new Error('AI response is missing summary or approach');
+  }
+
+  if (!isRecord(code)) {
+    throw new Error('AI response is missing code solutions');
+  }
+
+  if (
+    typeof code.javascript !== 'string' ||
+    typeof code.java !== 'string' ||
+    typeof code.python !== 'string'
+  ) {
+    throw new Error('AI response is missing one or more language solutions');
+  }
+
+  if (!isRecord(complexity)) {
+    throw new Error('AI response is missing complexity details');
+  }
+
+  if (typeof complexity.time !== 'string' || typeof complexity.space !== 'string') {
+    throw new Error('AI response is missing time or space complexity');
+  }
+
+  return {
+    summary,
+    approach,
+    code: {
+      javascript: code.javascript,
+      java: code.java,
+      python: code.python,
+    },
+    complexity: {
+      time: complexity.time,
+      space: complexity.space,
+    },
+  };
+}
+
 export async function solveProblemWithAI(apiKey: string, problemText: string): Promise<AISolution> {
   if (!apiKey) throw new Error("Gemini API Key is missing");
 
@@ -59,8 +109,8 @@ ${problemText}`;
   }
 
   try {
-    const parsed = JSON.parse(cleanContent) as AISolution;
-    return parsed;
+    const parsed = JSON.parse(cleanContent) as unknown;
+    return validateAISolution(parsed);
   } catch (e) {
     console.error("Failed to parse AI response", cleanContent);
     throw new Error("Failed to parse AI solution format");

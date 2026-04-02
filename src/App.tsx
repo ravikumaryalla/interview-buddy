@@ -20,13 +20,14 @@ const App: React.FC = () => {
     });
   }, [initStore]);
 
+  useEffect(() => {
+    if (!apiKey) {
+      setActiveTab('settings');
+    }
+  }, [apiKey]);
+
   if (isInitializing) {
     return <div className="h-full w-full bg-background flex text-foreground items-center justify-center font-semibold animate-pulse">Initializing...</div>;
-  }
-
-  // Force settings tab if no API key is set
-  if (!apiKey && activeTab !== 'settings') {
-    setActiveTab('settings');
   }
 
   return (

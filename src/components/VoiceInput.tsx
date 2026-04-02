@@ -9,6 +9,7 @@ export const VoiceInput: React.FC = () => {
   const [transcript, setTranscript] = useState('');
   const [messages, setMessages] = useState<{role: string, content: string}[]>([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
   
   const recognitionRef = useRef<any>(null);
 
@@ -19,6 +20,7 @@ export const VoiceInput: React.FC = () => {
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
+      setSpeechSupported(true);
 
       recognitionRef.current.onresult = (event: any) => {
         let currentTranscript = '';
@@ -41,6 +43,11 @@ export const VoiceInput: React.FC = () => {
   }, []);
 
   const toggleListen = () => {
+    if (!recognitionRef.current) {
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Voice input is not available in this environment. You can still type your question below.' }]);
+      return;
+    }
+
     if (isListening) {
       recognitionRef.current?.stop();
       setIsListening(false);
@@ -111,6 +118,9 @@ export const VoiceInput: React.FC = () => {
           <div className="flex flex-col items-center justify-center h-full text-foreground/40 space-y-2">
             <MessageSquareText size={32} />
             <p className="text-sm">Ask follow-up questions using your voice.</p>
+            {!speechSupported && (
+              <p className="text-xs max-w-xs text-center">Voice recognition is unavailable here, but text chat still works.</p>
+            )}
             <div className="flex flex-wrap justify-center gap-2 mt-4">
               <button onClick={() => handleQuickAction("Explain this solution")} className="px-3 py-1 bg-border/40 rounded-full text-xs hover:bg-border/60">Explain this</button>
               <button onClick={() => handleQuickAction("Can we optimize the space complexity?")} className="px-3 py-1 bg-border/40 rounded-full text-xs hover:bg-border/60">Optimize space</button>
