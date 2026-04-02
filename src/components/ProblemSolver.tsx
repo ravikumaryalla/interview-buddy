@@ -7,7 +7,7 @@ import { Loader2, Wand2, Clock, Box, FileText, ChevronRight } from 'lucide-react
 import ReactMarkdown from 'react-markdown';
 
 export const ProblemSolver: React.FC = () => {
-  const { currentProblem, currentSolution, setCurrentSolution, apiKey, isSolving, setIsSolving, selectedLanguage, setSelectedLanguage, saveToHistory } = useAppStore();
+  const { currentProblem, currentSolution, setCurrentSolution, apiKey, selectedModel, reasoningEffort, isSolving, setIsSolving, selectedLanguage, setSelectedLanguage, saveToHistory } = useAppStore();
   const [editableProblem, setEditableProblem] = useState(currentProblem);
   
   // Sync editable problem when currentProblem updates
@@ -17,13 +17,13 @@ export const ProblemSolver: React.FC = () => {
 
   const handleSolve = async () => {
     if (!apiKey) {
-      alert("Please enter a Gemini API key in the settings panel first.");
+      alert("Please enter an OpenAI API key in the settings panel first.");
       return;
     }
-    
+
     setIsSolving(true);
     try {
-      const solution: AISolution = await solveProblemWithAI(apiKey, editableProblem);
+      const solution: AISolution = await solveProblemWithAI(apiKey, editableProblem, selectedModel, reasoningEffort);
       setCurrentSolution(solution);
       
       // Auto save to history

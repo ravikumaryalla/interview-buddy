@@ -13,7 +13,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@google/genai": "^1.48.0",
+    "openai": "^4.103.0",
     "clsx": "^2.1.1",
     "electron-store": "^11.0.2",
     "lucide-react": "^1.7.0",

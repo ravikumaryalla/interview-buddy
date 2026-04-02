@@ -1,20 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Send, MessageSquareText } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { GoogleGenAI } from '@google/genai';
+import { chatWithAI } from '../lib/ai';
 
 export const VoiceInput: React.FC = () => {
-  const { apiKey, currentSolution, currentProblem } = useAppStore();
+  const { apiKey, selectedModel, reasoningEffort, currentSolution, currentProblem } = useAppStore();
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [messages, setMessages] = useState<{role: string, content: string}[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
-  
+
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
-    // Check if browser supports Web Speech API
     if (('webkitSpeechRecognition' in window) || ('SpeechRecognition' in window)) {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
@@ -34,7 +33,7 @@ export const VoiceInput: React.FC = () => {
         setIsListening(false);
       };
     }
-    
+
     return () => {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
@@ -60,44 +59,29 @@ export const VoiceInput: React.FC = () => {
 
   const handleSend = async () => {
     if (!transcript.trim()) return;
-    
+
     const userMsg = transcript;
     setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setTranscript('');
     if (isListening) toggleListen();
-    
+
     await askAI(userMsg);
   };
 
   const askAI = async (query: string) => {
     if (!apiKey) {
-      setMessages(prev => [...prev, { role: 'assistant', content: "Please configure your Gemini API key in settings." }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: "Please configure your OpenAI API key in settings." }]);
       return;
     }
 
     setIsTyping(true);
     try {
-      const ai = new GoogleGenAI({ apiKey });
-      
-      const contextPrompt = currentSolution 
+      const systemPrompt = currentSolution
         ? `You are an interview assistant. The user is currently solving this problem: "${currentProblem}"\nYour proposed solution summary was: "${currentSolution.summary}"\nThe code approach was: "${currentSolution.approach}"\n\nAnswer the user's follow-up questions clearly and concisely as if you are pair programming.`
         : `You are an interview assistant. Answer the user's questions clearly and concisely.`;
 
-      const contents = [
-          ...messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
-          { role: 'user', parts: [{ text: query }] }
-      ];
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents,
-        config: {
-          systemInstruction: contextPrompt,
-          temperature: 0.5,
-        }
-      });
-
-      setMessages(prev => [...prev, { role: 'assistant', content: response.text || 'No response' }]);
+      const reply = await chatWithAI(apiKey, query, messages, systemPrompt, selectedModel, reasoningEffort);
+      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
     } catch (e) {
       console.error(e);
       setMessages(prev => [...prev, { role: 'assistant', content: "Error connecting to AI." }]);
@@ -137,13 +121,13 @@ export const VoiceInput: React.FC = () => {
           ))
         )}
         {isTyping && (
-           <div className="flex justify-start">
-             <div className="max-w-[85%] p-3 rounded-2xl text-sm bg-panel border gap-1 border-border rounded-tl-sm flex items-center">
-               <span className="w-2 h-2 rounded-full bg-foreground/40 animate-bounce"></span>
-               <span className="w-2 h-2 rounded-full bg-foreground/40 animate-bounce" style={{animationDelay: '0.2s'}}></span>
-               <span className="w-2 h-2 rounded-full bg-foreground/40 animate-bounce" style={{animationDelay: '0.4s'}}></span>
-             </div>
-           </div>
+          <div className="flex justify-start">
+            <div className="max-w-[85%] p-3 rounded-2xl text-sm bg-panel border gap-1 border-border rounded-tl-sm flex items-center">
+              <span className="w-2 h-2 rounded-full bg-foreground/40 animate-bounce"></span>
+              <span className="w-2 h-2 rounded-full bg-foreground/40 animate-bounce" style={{animationDelay: '0.2s'}}></span>
+              <span className="w-2 h-2 rounded-full bg-foreground/40 animate-bounce" style={{animationDelay: '0.4s'}}></span>
+            </div>
+          </div>
         )}
       </div>
 

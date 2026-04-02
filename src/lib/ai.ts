@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 
 export interface AISolution {
   summary: string;
@@ -12,6 +12,28 @@ export interface AISolution {
     time: string;
     space: string;
   };
+}
+
+export interface OpenAIModel {
+  id: string;
+  name: string;
+  reasoning: boolean;
+}
+
+export const OPENAI_MODELS: OpenAIModel[] = [
+  { id: 'gpt-4o', name: 'GPT-4o', reasoning: false },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', reasoning: false },
+  { id: 'gpt-4.1', name: 'GPT-4.1', reasoning: false },
+  { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', reasoning: false },
+  { id: 'o4-mini', name: 'o4-mini', reasoning: true },
+  { id: 'o3', name: 'o3', reasoning: true },
+  { id: 'o1', name: 'o1', reasoning: true },
+];
+
+export type ReasoningEffort = 'low' | 'medium' | 'high';
+
+export function isReasoningModel(model: string): boolean {
+  return /^o\d/.test(model);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -64,12 +86,17 @@ function validateAISolution(value: unknown): AISolution {
   };
 }
 
-export async function solveProblemWithAI(apiKey: string, problemText: string): Promise<AISolution> {
-  if (!apiKey) throw new Error("Gemini API Key is missing");
+export async function solveProblemWithAI(
+  apiKey: string,
+  problemText: string,
+  model: string = 'gpt-4o',
+  reasoningEffort: ReasoningEffort = 'medium'
+): Promise<AISolution> {
+  if (!apiKey) throw new Error("OpenAI API Key is missing");
 
-  const ai = new GoogleGenAI({ apiKey });
+  const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
 
-  const prompt = `You are an expert technical interviewer and software engineer. Solve the following coding problem extracted from an image via OCR (it may contain slight typos). 
+  const systemPrompt = `You are an expert technical interviewer and software engineer. Solve the following coding problem extracted from an image via OCR (it may contain slight typos).
 
 Return ONLY a raw JSON object string with the following format (no markdown code blocks, just pure JSON parseable string):
 {
@@ -84,28 +111,29 @@ Return ONLY a raw JSON object string with the following format (no markdown code
     "time": "O(...)",
     "space": "O(...)"
   }
-}
+}`;
 
-Problem Text:
-${problemText}`;
+  const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+    model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: problemText },
+    ],
+    ...(isReasoningModel(model)
+      ? { reasoning_effort: reasoningEffort }
+      : { temperature: 0.2 }),
+  };
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: prompt,
-    config: {
-      temperature: 0.2,
-    }
-  });
+  const response = await client.chat.completions.create(params);
 
-  const content = response.text;
+  const content = response.choices[0]?.message?.content;
   if (!content) throw new Error("No response from AI");
 
-  // try to clean up the content if it contains markdown JSON blocks
   let cleanContent = content.trim();
-  if (cleanContent.startsWith('\`\`\`json')) {
-    cleanContent = cleanContent.replace(/^\`\`\`json\n/, '').replace(/\n\`\`\`$/, '');
-  } else if (cleanContent.startsWith('\`\`\`')) {
-    cleanContent = cleanContent.replace(/^\`\`\`\n/, '').replace(/\n\`\`\`$/, '');
+  if (cleanContent.startsWith('```json')) {
+    cleanContent = cleanContent.replace(/^```json\n/, '').replace(/\n```$/, '');
+  } else if (cleanContent.startsWith('```')) {
+    cleanContent = cleanContent.replace(/^```\n/, '').replace(/\n```$/, '');
   }
 
   try {
@@ -115,4 +143,37 @@ ${problemText}`;
     console.error("Failed to parse AI response", cleanContent);
     throw new Error("Failed to parse AI solution format");
   }
+}
+
+export async function chatWithAI(
+  apiKey: string,
+  query: string,
+  history: { role: string; content: string }[],
+  systemPrompt: string,
+  model: string = 'gpt-4o',
+  reasoningEffort: ReasoningEffort = 'medium'
+): Promise<string> {
+  if (!apiKey) throw new Error("OpenAI API Key is missing");
+
+  const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    { role: 'system', content: systemPrompt },
+    ...history.map(m => ({
+      role: (m.role === 'assistant' ? 'assistant' : 'user') as 'assistant' | 'user',
+      content: m.content,
+    })),
+    { role: 'user', content: query },
+  ];
+
+  const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+    model,
+    messages,
+    ...(isReasoningModel(model)
+      ? { reasoning_effort: reasoningEffort }
+      : { temperature: 0.5 }),
+  };
+
+  const response = await client.chat.completions.create(params);
+  return response.choices[0]?.message?.content ?? 'No response';
 }

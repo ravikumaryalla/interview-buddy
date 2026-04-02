@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ReasoningEffort } from '../lib/ai';
 
 export interface HistoryItem {
   id: string;
@@ -9,19 +10,23 @@ export interface HistoryItem {
 
 export interface AppState {
   apiKey: string;
+  selectedModel: string;
+  reasoningEffort: ReasoningEffort;
   theme: 'dark' | 'light';
   opacity: number;
   isAlwaysOnTop: boolean;
   history: HistoryItem[];
-  
+
   // App runtime state
   currentProblem: string;
   currentSolution: any | null;
   selectedLanguage: 'javascript' | 'python' | 'java';
   isSolving: boolean;
-  
+
   // Actions
   setApiKey: (key: string) => void;
+  setSelectedModel: (model: string) => void;
+  setReasoningEffort: (effort: ReasoningEffort) => void;
   setTheme: (theme: 'dark' | 'light') => void;
   setOpacity: (opacity: number) => void;
   setAlwaysOnTop: (enabled: boolean) => void;
@@ -36,6 +41,8 @@ export interface AppState {
 
 export const useAppStore = create<AppState>((set, get) => ({
   apiKey: '',
+  selectedModel: 'gpt-4o',
+  reasoningEffort: 'medium',
   theme: 'dark',
   opacity: 1.0,
   isAlwaysOnTop: false,
@@ -49,13 +56,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ apiKey: key });
     window.electronAPI.storeSet('apiKey', key);
   },
-  
+
+  setSelectedModel: (model) => {
+    set({ selectedModel: model });
+    window.electronAPI.storeSet('selectedModel', model);
+  },
+
+  setReasoningEffort: (effort) => {
+    set({ reasoningEffort: effort });
+    window.electronAPI.storeSet('reasoningEffort', effort);
+  },
+
   setTheme: (theme) => {
     set({ theme });
     window.electronAPI.storeSet('theme', theme);
     document.documentElement.className = theme;
   },
-  
+
   setOpacity: async (opacity) => {
     set({ opacity });
     window.electronAPI.storeSet('opacity', opacity);
@@ -67,15 +84,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     window.electronAPI.storeSet('isAlwaysOnTop', enabled);
     await window.electronAPI.toggleAlwaysOnTop(enabled);
   },
-  
+
   setCurrentProblem: (problem) => set({ currentProblem: problem, currentSolution: null }),
-  
+
   setCurrentSolution: (solution) => set({ currentSolution: solution }),
-  
+
   setSelectedLanguage: (lang) => set({ selectedLanguage: lang }),
-  
+
   setIsSolving: (isSolving) => set({ isSolving }),
-  
+
   saveToHistory: (item) => {
     const newItem: HistoryItem = {
       ...item,
@@ -95,12 +112,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   initStore: async () => {
     const key = await window.electronAPI.storeGet('apiKey', '');
+    const selectedModel = await window.electronAPI.storeGet('selectedModel', 'gpt-4o');
+    const reasoningEffort = await window.electronAPI.storeGet('reasoningEffort', 'medium');
     const th = await window.electronAPI.storeGet('theme', 'dark');
     const opacity = await window.electronAPI.storeGet('opacity', 1.0);
     const isAlwaysOnTop = await window.electronAPI.storeGet('isAlwaysOnTop', false);
     const hist = await window.electronAPI.storeGet('history', []);
-    
-    set({ apiKey: key, theme: th, opacity, isAlwaysOnTop, history: hist });
+
+    set({ apiKey: key, selectedModel, reasoningEffort, theme: th, opacity, isAlwaysOnTop, history: hist });
     document.documentElement.className = th;
     await window.electronAPI.setOpacity(opacity);
     await window.electronAPI.toggleAlwaysOnTop(isAlwaysOnTop);
