@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Send, MessageSquareText } from 'lucide-react';
+import { Mic, MicOff, Send, MessageSquareText, Trash2 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { chatWithAI } from '../lib/ai';
 
@@ -95,8 +95,24 @@ export const VoiceInput: React.FC = () => {
     askAI(query);
   };
 
+  const handleClearChat = () => {
+    if (isListening) toggleListen();
+    setMessages([]);
+    setTranscript('');
+  };
+
   return (
     <div className="flex flex-col h-full p-4 space-y-4 relative">
+      {messages.length > 0 && (
+        <div className="flex justify-end">
+          <button
+            onClick={handleClearChat}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-foreground/50 hover:text-red-500 hover:bg-red-500/10 border border-border hover:border-red-500/30 rounded-lg transition-colors"
+          >
+            <Trash2 size={12} /> Clear chat
+          </button>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto pr-2 space-y-3 pb-24">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-foreground/40 space-y-2">

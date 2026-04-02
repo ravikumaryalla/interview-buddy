@@ -20,6 +20,9 @@ export interface AppState {
   // App runtime state
   currentProblem: string;
   currentSolution: any | null;
+  promptMode: 'coding' | 'custom';
+  customPrompt: string;
+  customResponse: string | null;
   selectedLanguage: 'javascript' | 'python' | 'java';
   isSolving: boolean;
 
@@ -32,6 +35,9 @@ export interface AppState {
   setAlwaysOnTop: (enabled: boolean) => void;
   setCurrentProblem: (problem: string) => void;
   setCurrentSolution: (solution: any) => void;
+  setPromptMode: (mode: 'coding' | 'custom') => void;
+  setCustomPrompt: (prompt: string) => void;
+  setCustomResponse: (response: string | null) => void;
   setSelectedLanguage: (lang: 'javascript' | 'python' | 'java') => void;
   setIsSolving: (isSolving: boolean) => void;
   saveToHistory: (item: Omit<HistoryItem, 'id' | 'timestamp'>) => void;
@@ -49,6 +55,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   history: [],
   currentProblem: '',
   currentSolution: null,
+  promptMode: 'coding',
+  customPrompt: '',
+  customResponse: null,
   selectedLanguage: 'javascript',
   isSolving: false,
 
@@ -85,9 +94,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     await window.electronAPI.toggleAlwaysOnTop(enabled);
   },
 
-  setCurrentProblem: (problem) => set({ currentProblem: problem, currentSolution: null }),
+  setCurrentProblem: (problem) => set({ currentProblem: problem, currentSolution: null, customResponse: null }),
 
   setCurrentSolution: (solution) => set({ currentSolution: solution }),
+
+  setPromptMode: (mode) => set({ promptMode: mode }),
+
+  setCustomPrompt: (prompt) => set({ customPrompt: prompt }),
+
+  setCustomResponse: (response) => set({ customResponse: response }),
 
   setSelectedLanguage: (lang) => set({ selectedLanguage: lang }),
 

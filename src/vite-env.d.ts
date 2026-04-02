@@ -2,6 +2,7 @@
 
 export interface IElectronAPI {
   captureScreen: () => Promise<string>;
+  captureArea: () => Promise<{ image: string; region: { x: number; y: number; w: number; h: number } } | null>;
   setOpacity: (value: number) => Promise<number>;
   toggleAlwaysOnTop: (enable: boolean) => Promise<boolean>;
   closeApp: () => Promise<void>;

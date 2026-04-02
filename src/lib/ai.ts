@@ -145,6 +145,32 @@ Return ONLY a raw JSON object string with the following format (no markdown code
   }
 }
 
+export async function answerWithCustomPrompt(
+  apiKey: string,
+  extractedText: string,
+  customPrompt: string,
+  model: string = 'gpt-4o',
+  reasoningEffort: ReasoningEffort = 'medium'
+): Promise<string> {
+  if (!apiKey) throw new Error("OpenAI API Key is missing");
+
+  const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+
+  const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+    model,
+    messages: [
+      { role: 'system', content: customPrompt },
+      { role: 'user', content: extractedText },
+    ],
+    ...(isReasoningModel(model)
+      ? { reasoning_effort: reasoningEffort }
+      : { temperature: 0.5 }),
+  };
+
+  const response = await client.chat.completions.create(params);
+  return response.choices[0]?.message?.content ?? 'No response';
+}
+
 export async function chatWithAI(
   apiKey: string,
   query: string,

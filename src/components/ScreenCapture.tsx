@@ -1,22 +1,18 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { Camera, Crop, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Camera, Loader2, CheckCircle, RotateCcw, Code2, MessageSquare } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { extractTextFromImage } from '../lib/ocr';
 
 export const ScreenCapture: React.FC = () => {
-  const { setCurrentProblem, setCurrentSolution } = useAppStore();
-  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
-  const [isCapturing, setIsCapturing] = useState(false);
+  const {
+    setCurrentProblem, setCurrentSolution, setCustomResponse, currentProblem,
+    promptMode, setPromptMode, customPrompt, setCustomPrompt,
+  } = useAppStore();
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  
-  // Crop state
-  const imgRef = useRef<HTMLImageElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [startPos, setStartPos] = useState({ x: 0, y: 0 });
-  const [cropBox, setCropBox] = useState<{ x: number, y: number, w: number, h: number } | null>(null);
 
   useEffect(() => {
-    // Listen to shortcut
     window.electronAPI.onShortcutCapture(() => {
       handleCapture();
     });
@@ -26,141 +22,125 @@ export const ScreenCapture: React.FC = () => {
   }, []);
 
   const handleCapture = async () => {
-    setIsCapturing(true);
-    setScreenshotUrl(null);
-    setCropBox(null);
+    setIsSelecting(true);
+    setPreviewUrl(null);
     try {
-      const base64 = await window.electronAPI.captureScreen();
-      setScreenshotUrl(base64);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsCapturing(false);
-    }
-  };
+      const result = await window.electronAPI.captureArea();
+      if (!result) return; // user cancelled
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLImageElement>) => {
-    if (!imgRef.current) return;
-    const rect = imgRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    setStartPos({ x, y });
-    setCropBox({ x, y, w: 0, h: 0 });
-    setIsDragging(true);
-  };
+      setIsProcessing(true);
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLImageElement>) => {
-    if (!isDragging || !imgRef.current) return;
-    const rect = imgRef.current.getBoundingClientRect();
-    const currentX = e.clientX - rect.left;
-    const currentY = e.clientY - rect.top;
-    
-    setCropBox({
-      x: Math.min(startPos.x, currentX),
-      y: Math.min(startPos.y, currentY),
-      w: Math.abs(currentX - startPos.x),
-      h: Math.abs(currentY - startPos.y)
-    });
-  };
+      // Crop the full screenshot down to the selected region
+      const img = new Image();
+      img.src = result.image;
+      await new Promise<void>((res) => { img.onload = () => res(); });
 
-  const handleMouseUp = async () => {
-    setIsDragging(false);
-    if (!cropBox || cropBox.w < 10 || cropBox.h < 10) {
-      setCropBox(null); // click without drag
-      return;
-    }
-    
-    await processCrop();
-  };
-
-  const processCrop = async () => {
-    if (!cropBox || !imgRef.current || !screenshotUrl) return;
-    
-    setIsProcessing(true);
-    try {
-      // Scale coordinates from rendered image size to natural image size
-      const scaleX = imgRef.current.naturalWidth / imgRef.current.width;
-      const scaleY = imgRef.current.naturalHeight / imgRef.current.height;
-      
+      const { x, y, w, h } = result.region;
       const canvas = document.createElement('canvas');
-      canvas.width = cropBox.w * scaleX;
-      canvas.height = cropBox.h * scaleY;
-      const ctx = canvas.getContext('2d');
-      
-      if (ctx) {
-        ctx.drawImage(
-          imgRef.current,
-          cropBox.x * scaleX, 
-          cropBox.y * scaleY, 
-          cropBox.w * scaleX, 
-          cropBox.h * scaleY,
-          0, 0,
-          canvas.width, canvas.height
-        );
-        const croppedBase64 = canvas.toDataURL('image/png');
-        const text = await extractTextFromImage(croppedBase64);
-        setCurrentSolution(null);
-        setCurrentProblem(text.trim());
-        setScreenshotUrl(null); // clear after success
-      }
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, x, y, w, h, 0, 0, w, h);
+      const croppedBase64 = canvas.toDataURL('image/png');
+
+      setPreviewUrl(croppedBase64);
+      const text = await extractTextFromImage(croppedBase64);
+      setCurrentSolution(null);
+      setCurrentProblem(text.trim());
     } catch (e) {
       console.error(e);
-      alert('Failed to process image');
+      alert('Failed to capture area');
     } finally {
+      setIsSelecting(false);
       setIsProcessing(false);
     }
   };
 
+  const handleReset = () => {
+    setPreviewUrl(null);
+    setCurrentProblem('');
+    setCurrentSolution(null);
+    setCustomResponse(null);
+  };
+
+  const busy = isSelecting || isProcessing;
+  const hasCaptured = !!previewUrl || !!currentProblem;
+
   return (
-    <div className="flex flex-col space-y-4 p-4">
-      <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-xl bg-panel/30 hover:bg-panel/50 transition-colors">
+    <div className="flex flex-col space-y-3 p-4">
+      {/* Mode selector */}
+      <div className="flex bg-background border border-border rounded-lg p-1 gap-1">
         <button
-          onClick={handleCapture}
-          disabled={isCapturing || isProcessing}
-          className="flex flex-col items-center justify-center space-y-2 text-foreground/70 hover:text-accent transition-colors disabled:opacity-50"
+          onClick={() => setPromptMode('coding')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-colors ${promptMode === 'coding' ? 'bg-panel shadow-sm text-accent' : 'text-foreground/60 hover:text-foreground'}`}
         >
-          {isCapturing ? <Loader2 className="animate-spin text-accent" size={32} /> : <Camera size={32} />}
-          <span className="font-semibold text-lg">{isCapturing ? 'Capturing...' : 'Capture Screen'}</span>
-          <span className="text-xs opacity-70 px-2 py-1 bg-foreground/10 rounded-md">Ctrl+Shift+S</span>
+          <Code2 size={13} /> Coding Problem
+        </button>
+        <button
+          onClick={() => setPromptMode('custom')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-colors ${promptMode === 'custom' ? 'bg-panel shadow-sm text-accent' : 'text-foreground/60 hover:text-foreground'}`}
+        >
+          <MessageSquare size={13} /> Custom Prompt
         </button>
       </div>
 
-      {screenshotUrl && (
-        <div className="flex flex-col space-y-2 relative">
-          <p className="text-sm text-foreground/60 flex items-center">
-            <Crop size={14} className="mr-1" />
-            Drag to crop the problem area
+      {/* Custom prompt input */}
+      {promptMode === 'custom' && (
+        <textarea
+          value={customPrompt}
+          onChange={(e) => setCustomPrompt(e.target.value)}
+          placeholder="e.g. Explain what this code does, or summarize this diagram, or translate this text..."
+          rows={3}
+          className="w-full p-3 bg-panel/50 border border-border rounded-lg text-sm outline-none focus:ring-2 focus:ring-accent resize-none placeholder:text-foreground/30 transition-colors"
+        />
+      )}
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleCapture}
+          disabled={busy}
+          className="flex-1 flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-xl bg-panel/30 hover:bg-panel/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed space-y-2 text-foreground/70 hover:text-accent"
+        >
+        {isSelecting ? (
+          <>
+            <Loader2 className="animate-spin text-accent" size={32} />
+            <span className="font-semibold text-lg">Select Area...</span>
+            <span className="text-xs opacity-70">Drag on screen · ESC to cancel</span>
+          </>
+        ) : isProcessing ? (
+          <>
+            <Loader2 className="animate-spin text-accent" size={32} />
+            <span className="font-semibold text-lg">Extracting Text...</span>
+          </>
+        ) : (
+          <>
+            <Camera size={32} />
+            <span className="font-semibold text-lg">Capture Area</span>
+            <span className="text-xs opacity-70 px-2 py-1 bg-foreground/10 rounded-md">Ctrl+Shift+S</span>
+          </>
+        )}
+        </button>
+        {hasCaptured && !busy && (
+          <button
+            onClick={handleReset}
+            title="Reset — clear capture and start fresh"
+            className="p-3 rounded-xl border border-border bg-panel/30 hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-500 text-foreground/50 transition-colors self-stretch flex items-center"
+          >
+            <RotateCcw size={18} />
+          </button>
+        )}
+      </div>
+
+      {previewUrl && (
+        <div className="flex flex-col space-y-1">
+          <p className="text-xs text-foreground/50 flex items-center">
+            <CheckCircle size={12} className="mr-1 text-green-500" /> Area captured
           </p>
-          <div className="relative border border-border rounded-lg overflow-hidden bg-black/20">
-            <img
-              ref={imgRef}
-              src={screenshotUrl}
-              alt="Screenshot"
-              className="w-full object-contain touch-none select-none cursor-crosshair max-h-[400px]"
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={() => isDragging && handleMouseUp()}
-              draggable={false}
-            />
-            {cropBox && (
-              <div 
-                className="absolute border-2 border-accent bg-accent/20 pointer-events-none transition-none"
-                style={{
-                  left: cropBox.x,
-                  top: cropBox.y,
-                  width: cropBox.w,
-                  height: cropBox.h
-                }}
-              />
-            )}
-            {isProcessing && (
-              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center z-10">
-                <Loader2 className="animate-spin text-accent mb-2" size={32} />
-                <span className="font-medium">Extracting Text (OCR)...</span>
-              </div>
-            )}
-          </div>
+          <img
+            src={previewUrl}
+            alt="Captured area"
+            className="w-full rounded-lg border border-border object-contain max-h-[120px]"
+          />
         </div>
       )}
     </div>
