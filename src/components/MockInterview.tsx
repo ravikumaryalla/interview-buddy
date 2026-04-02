@@ -1,100 +1,117 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Square, Timer, RefreshCw } from 'lucide-react';
+import { Play, Square, RotateCcw, Timer } from 'lucide-react';
+
+const DURATIONS = [15, 20, 30, 45, 60];
 
 export const MockInterview: React.FC = () => {
-  const [durationParams, setDurationParams] = useState<number>(30); // minutes
-  const [timeLeft, setTimeLeft] = useState<number>(30 * 60); // seconds
-  const [isActive, setIsActive] = useState(false);
+  const [duration, setDuration] = useState(30);
+  const [timeLeft, setTimeLeft] = useState(30 * 60);
+  const [running, setRunning] = useState(false);
 
   useEffect(() => {
-    let interval: any = null;
-    if (isActive && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft(time => time - 1);
-      }, 1000);
-    } else if (timeLeft === 0) {
-      setIsActive(false);
-      clearInterval(interval);
-      // Play sound or alert?
-    }
-    return () => clearInterval(interval);
-  }, [isActive, timeLeft]);
+    if (!running) return;
+    if (timeLeft <= 0) { setRunning(false); return; }
+    const t = setInterval(() => setTimeLeft(s => s - 1), 1000);
+    return () => clearInterval(t);
+  }, [running, timeLeft]);
 
-  const toggleTimer = () => {
-    if (!isActive && timeLeft === 0) {
-        setTimeLeft(durationParams * 60);
-    }
-    setIsActive(!isActive);
+  const toggle = () => {
+    if (!running && timeLeft === 0) setTimeLeft(duration * 60);
+    setRunning(r => !r);
   };
 
-  const resetTimer = () => {
-    setIsActive(false);
-    setTimeLeft(durationParams * 60);
+  const reset = () => {
+    setRunning(false);
+    setTimeLeft(duration * 60);
   };
 
-  const handleDurationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const newD = parseInt(e.target.value);
-      setDurationParams(newD);
-      if (!isActive) {
-          setTimeLeft(newD * 60);
-      }
+  const changeDuration = (d: number) => {
+    setDuration(d);
+    if (!running) setTimeLeft(d * 60);
   };
 
-  const minutes = Math.floor(timeLeft / 60);
-  const seconds = timeLeft % 60;
-  
-  const isUrgent = timeLeft > 0 && timeLeft <= 300; // < 5 mins
+  const mins = Math.floor(timeLeft / 60);
+  const secs = timeLeft % 60;
+  const pct = timeLeft / (duration * 60);
+  const urgent = timeLeft > 0 && timeLeft <= 300;
+  const done = timeLeft === 0;
+
+  // Circular progress
+  const R = 52;
+  const CIRC = 2 * Math.PI * R;
+  const dash = CIRC * pct;
 
   return (
-    <div className="flex flex-col items-center justify-center p-8 h-full space-y-8">
-      
-      <div className="flex flex-col justify-center items-center">
-         <Timer size={48} className={isUrgent ? 'text-red-500 animate-pulse' : 'text-accent'} />
-         <h2 className="text-xl font-semibold mt-4">Mock Interview Timer</h2>
-         <p className="text-sm text-foreground/60 text-center mt-2 px-4 shadow-sm">
-             Simulate real pressure. Setup your time, capture your problem and try to solve it before time runs out.
-         </p>
+    <div className="flex flex-col items-center justify-center h-full gap-6 p-6 select-none">
+
+      {/* Header */}
+      <div className="text-center">
+        <div className="flex items-center justify-center gap-2 text-foreground/60 mb-1">
+          <Timer size={16} className={urgent ? 'text-red-400' : 'text-accent'} />
+          <span className="text-sm font-medium">Mock Interview Timer</span>
+        </div>
+        <p className="text-xs text-foreground/35">Simulate real interview pressure</p>
       </div>
 
-      <div className={`text-6xl font-mono tracking-widest px-8 py-6 rounded-2xl glass-panel relative ${isUrgent ? 'border-red-500 bg-red-500/10 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : 'border-border shadow-lg shadow-black/5'} transition-all`}>
-        <span className={isUrgent ? 'text-red-500' : 'text-foreground'}>
-            {minutes.toString().padStart(2, '0')}
-        </span>
-        <span className={isUrgent ? 'text-red-400' : 'text-foreground/40'}>:</span>
-        <span className={isUrgent ? 'text-red-500' : 'text-foreground'}>
-            {seconds.toString().padStart(2, '0')}
-        </span>
+      {/* Circular timer */}
+      <div className="relative flex items-center justify-center">
+        <svg width="140" height="140" className="-rotate-90">
+          <circle cx="70" cy="70" r={R} fill="none" stroke="var(--border)" strokeWidth="6" />
+          <circle
+            cx="70" cy="70" r={R}
+            fill="none"
+            stroke={done ? 'rgba(34,197,94,0.6)' : urgent ? 'rgba(239,68,68,0.8)' : 'hsl(var(--accent))'}
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeDasharray={`${dash} ${CIRC}`}
+            className="transition-all duration-1000"
+          />
+        </svg>
+        <div className="absolute flex flex-col items-center">
+          <span className={`text-3xl font-mono font-bold tabular-nums tracking-tight
+            ${done ? 'text-green-400' : urgent ? 'text-red-400' : 'text-foreground'}`}>
+            {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
+          </span>
+          {done && <span className="text-[10px] text-green-400 font-medium mt-0.5">Time's up!</span>}
+          {running && !done && !urgent && <span className="text-[10px] text-foreground/30 mt-0.5">in progress</span>}
+          {urgent && running && <span className="text-[10px] text-red-400/70 mt-0.5 animate-pulse">hurry up!</span>}
+        </div>
       </div>
 
-      <div className="flex items-center space-x-4 w-full justify-center">
-        <select 
-            value={durationParams} 
-            onChange={handleDurationChange}
-            disabled={isActive}
-            className="px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground disabled:opacity-50 min-w-[100px] text-center font-medium shadow-sm transition-colors cursor-pointer hover:border-accent"
-        >
-            <option value={15}>15 mins</option>
-            <option value={20}>20 mins</option>
-            <option value={30}>30 mins</option>
-            <option value={45}>45 mins</option>
-            <option value={60}>60 mins</option>
-        </select>
+      {/* Duration selector */}
+      <div className="flex items-center gap-1.5">
+        {DURATIONS.map(d => (
+          <button
+            key={d}
+            onClick={() => changeDuration(d)}
+            disabled={running}
+            className={`w-10 h-8 rounded-lg text-xs font-medium transition-all
+              ${duration === d
+                ? 'bg-accent text-white shadow-sm shadow-accent/20'
+                : 'bg-panel border border-border text-foreground/50 hover:text-foreground disabled:opacity-40'}`}
+          >
+            {d}m
+          </button>
+        ))}
+      </div>
 
-        <button 
-           onClick={toggleTimer} 
-           className={`px-5 py-2.5 rounded-lg font-medium shadow-md transition-all flex items-center space-x-2 flex-1 max-w-[140px] justify-center text-white
-             ${isActive ? 'bg-orange-500 hover:bg-orange-600' : 'bg-accent hover:bg-accent/90'}`}
+      {/* Controls */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={reset}
+          className="p-2.5 rounded-xl bg-panel border border-border text-foreground/50 hover:text-foreground hover:bg-foreground/5 transition-colors"
+          title="Reset"
         >
-             {isActive ? <Square size={16} /> : <Play size={16} />}
-             <span>{isActive ? 'Pause' : 'Start'}</span>
+          <RotateCcw size={16} />
         </button>
-
-        <button 
-           onClick={resetTimer} 
-           className="p-3 bg-panel border border-border text-foreground hover:bg-foreground/5 hover:border-foreground/30 rounded-lg shadow-sm transition-colors"
-           title="Reset Timer"
+        <button
+          onClick={toggle}
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm
+            ${running
+              ? 'bg-orange-500/15 text-orange-400 border border-orange-500/25 hover:bg-orange-500/20'
+              : 'bg-accent text-white hover:bg-accent/90 shadow-accent/20'}`}
         >
-             <RefreshCw size={18} className={isActive ? 'opacity-50' : ''} />
+          {running ? <><Square size={14} /> Pause</> : <><Play size={14} /> {done ? 'Restart' : 'Start'}</>}
         </button>
       </div>
 

@@ -7,94 +7,107 @@ import { VoiceInput } from './components/VoiceInput';
 import { SettingsPanel } from './components/SettingsPanel';
 import { HistoryPanel } from './components/HistoryPanel';
 import { MockInterview } from './components/MockInterview';
-import { Wand2, Settings, Clock, Mic, Target } from 'lucide-react';
+import { Sparkles, Settings, History, Mic, Timer } from 'lucide-react';
+
+type Tab = 'solve' | 'voice' | 'history' | 'mock' | 'settings';
+
+const TABS: { id: Tab; label: string; Icon: React.FC<any> }[] = [
+  { id: 'solve',    label: 'Solve',    Icon: Sparkles },
+  { id: 'voice',    label: 'Chat',     Icon: Mic },
+  { id: 'history',  label: 'History',  Icon: History },
+  { id: 'mock',     label: 'Mock',     Icon: Timer },
+  { id: 'settings', label: 'Settings', Icon: Settings },
+];
 
 const App: React.FC = () => {
   const { initStore, apiKey } = useAppStore();
-  const [activeTab, setActiveTab] = useState<'solve' | 'voice' | 'history' | 'mock' | 'settings'>('solve');
-  const [isInitializing, setIsInitializing] = useState(true);
+  const [activeTab, setActiveTab] = useState<Tab>('solve');
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    initStore().then(() => {
-      setIsInitializing(false);
-    });
+    initStore().then(() => setReady(true));
   }, [initStore]);
 
   useEffect(() => {
-    if (!apiKey) {
-      setActiveTab('settings');
-    }
-  }, [apiKey]);
+    if (ready && !apiKey) setActiveTab('settings');
+  }, [ready, apiKey]);
 
-  if (isInitializing) {
-    return <div className="h-full w-full bg-background flex text-foreground items-center justify-center font-semibold animate-pulse">Initializing...</div>;
+  if (!ready) {
+    return (
+      <div className="h-full w-full bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-foreground/40">
+          <div className="w-6 h-6 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+          <span className="text-xs">Loading…</span>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col h-screen w-full bg-background text-foreground overflow-hidden rounded-lg border border-border">
-      {/* 1. Floating Window Controls */}
+    <div className="flex flex-col h-screen w-full bg-background text-foreground overflow-hidden rounded-xl border border-border shadow-2xl">
+
+      {/* Title bar */}
       <FloatingToolbar />
-      
-      {/* 2. Top Navigation Tabs */}
-      <div className="flex bg-panel border-b border-border shadow-sm no-drag-region sticky top-0 z-10 px-1 py-1 overflow-x-auto no-scrollbar">
-        <button
-          onClick={() => setActiveTab('solve')}
-          className={`flex-1 min-w-[70px] flex flex-col items-center justify-center p-2 rounded-lg text-xs font-medium transition-all ${activeTab === 'solve' ? 'bg-accent/10 border border-accent/20 text-accent shadow-inner' : 'text-foreground/60 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5'}`}
-        >
-          <Wand2 size={16} className="mb-1" /> Solve
-        </button>
-        <button
-          onClick={() => setActiveTab('voice')}
-          className={`flex-1 min-w-[70px] flex flex-col items-center justify-center p-2 rounded-lg text-xs font-medium transition-all ${activeTab === 'voice' ? 'bg-accent/10 border border-accent/20 text-accent shadow-inner' : 'text-foreground/60 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5'}`}
-        >
-          <Mic size={16} className="mb-1" /> Voice
-        </button>
-        <button
-          onClick={() => setActiveTab('history')}
-          className={`flex-1 min-w-[70px] flex flex-col items-center justify-center p-2 rounded-lg text-xs font-medium transition-all ${activeTab === 'history' ? 'bg-accent/10 border border-accent/20 text-accent shadow-inner' : 'text-foreground/60 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5'}`}
-        >
-          <Clock size={16} className="mb-1" /> History
-        </button>
-        <button
-          onClick={() => setActiveTab('mock')}
-          className={`flex-1 min-w-[70px] flex flex-col items-center justify-center p-2 rounded-lg text-xs font-medium transition-all ${activeTab === 'mock' ? 'bg-accent/10 border border-accent/20 text-accent shadow-inner' : 'text-foreground/60 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5'}`}
-        >
-          <Target size={16} className="mb-1" /> Mock
-        </button>
-        <button
-          onClick={() => setActiveTab('settings')}
-          className={`flex-1 min-w-[70px] flex flex-col items-center justify-center p-2 rounded-lg text-xs font-medium transition-all ${activeTab === 'settings' ? 'bg-accent/10 border border-accent/20 text-accent shadow-inner' : 'text-foreground/60 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5'}`}
-        >
-          <Settings size={16} className="mb-1" /> Settings
-        </button>
+
+      {/* Tab bar */}
+      <div className="flex bg-panel/60 border-b border-border no-drag-region shrink-0">
+        {TABS.map(({ id, label, Icon }) => {
+          const active = activeTab === id;
+          return (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`relative flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium transition-colors
+                ${active ? 'text-accent' : 'text-foreground/40 hover:text-foreground/70'}`}
+            >
+              <Icon size={15} strokeWidth={active ? 2.5 : 2} />
+              {label}
+              {active && (
+                <span className="absolute bottom-0 inset-x-3 h-0.5 bg-accent rounded-t-full" />
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* 3. Main Content Area */}
+      {/* Content */}
       <div className="flex-1 overflow-hidden relative no-drag-region">
-        <div className={`absolute inset-0 transition-opacity duration-300 ${activeTab === 'solve' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
-          <div className="h-[250px] border-b border-border bg-panel/30">
+
+        {/* Solve tab — ScreenCapture (auto) + ProblemSolver (flex-1) */}
+        <div className={`absolute inset-0 flex flex-col transition-opacity duration-200
+          ${activeTab === 'solve' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+          <div className="shrink-0 border-b border-border">
             <ScreenCapture />
           </div>
-          <div className="h-[calc(100%-250px)]">
+          <div className="flex-1 overflow-hidden">
             <ProblemSolver />
           </div>
         </div>
 
-        <div className={`absolute inset-0 transition-opacity duration-300 ${activeTab === 'voice' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+        {/* Chat/Voice tab */}
+        <div className={`absolute inset-0 transition-opacity duration-200
+          ${activeTab === 'voice' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
           <VoiceInput />
         </div>
 
-        <div className={`absolute inset-0 transition-opacity duration-300 ${activeTab === 'history' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+        {/* History tab */}
+        <div className={`absolute inset-0 transition-opacity duration-200
+          ${activeTab === 'history' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
           <HistoryPanel />
         </div>
-        
-        <div className={`absolute inset-0 transition-opacity duration-300 ${activeTab === 'mock' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+
+        {/* Mock tab */}
+        <div className={`absolute inset-0 transition-opacity duration-200
+          ${activeTab === 'mock' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
           <MockInterview />
         </div>
 
-        <div className={`absolute inset-0 transition-opacity duration-300 bg-background overflow-y-auto ${activeTab === 'settings' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+        {/* Settings tab */}
+        <div className={`absolute inset-0 overflow-y-auto bg-background transition-opacity duration-200
+          ${activeTab === 'settings' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
           <SettingsPanel />
         </div>
+
       </div>
     </div>
   );
