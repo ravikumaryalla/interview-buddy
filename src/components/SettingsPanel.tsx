@@ -18,7 +18,7 @@ export const SettingsPanel: React.FC = () => {
   const showReasoning = isReasoningModel(selectedModel);
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto">
+    <div className="p-6 space-y-6">
       <div>
         <h2 className="text-lg font-semibold flex items-center mb-4">
           <Settings className="mr-2 text-accent" size={20} /> App Settings

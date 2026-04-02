@@ -92,7 +92,7 @@ const App: React.FC = () => {
           <MockInterview />
         </div>
 
-        <div className={`absolute inset-0 transition-opacity duration-300 bg-background ${activeTab === 'settings' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+        <div className={`absolute inset-0 transition-opacity duration-300 bg-background overflow-y-auto ${activeTab === 'settings' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
           <SettingsPanel />
         </div>
       </div>
