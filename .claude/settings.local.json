@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm electron:dev)",
+      "Bash(pnpm ls:*)",
+      "Bash(pnpm add:*)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :5173)",
+      "Bash(tasklist:*)",
+      "Bash(powershell:*)",
+      "Bash(rm -rf node_modules/.pnpm/electron@41.1.1/node_modules/electron/dist)",
+      "Bash(pnpm install:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); const p=JSON.parse\\(d\\); console.log\\('deps:', Object.keys\\(p.dependencies\\).join\\(', '\\)\\)\")"
+    ]
+  }
+}
