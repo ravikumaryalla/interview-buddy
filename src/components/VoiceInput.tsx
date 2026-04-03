@@ -1,186 +1,491 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Send, Trash2, Bot } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Mic, Send, Trash2, Bot, Volume2, Square,
+  Loader2, Radio, PhoneOff, PhoneCall, Sparkles, AudioWaveform
+} from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { chatWithAI } from '../lib/ai';
+import { chatWithAI, transcribeAudio } from '../lib/ai';
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+type Tab        = 'chat' | 'live';
+type AudioSrc   = 'mic' | 'system';
+type LiveStatus = 'idle' | 'connecting' | 'connected' | 'error';
+
+interface LiveMsg { id: string; role: 'user' | 'ai'; text: string }
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function uid() { return Math.random().toString(36).slice(2); }
+
+// ─── Component ───────────────────────────────────────────────────────────────
 export const VoiceInput: React.FC = () => {
   const { apiKey, selectedModel, reasoningEffort, currentSolution, currentProblem } = useAppStore();
-  const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState('');
-  const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
-  const [isTyping, setIsTyping] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(false);
+  const [tab, setTab] = useState<Tab>('chat');
 
-  const recognitionRef = useRef<any>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  // ── CHAT TAB state ─────────────────────────────────────────────────────────
+  const [inputMode, setInputMode]     = useState<AudioSrc>('mic');
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcript, setTranscript]   = useState('');
+  const [chatMsgs, setChatMsgs]       = useState<{ role: string; content: string }[]>([]);
+  const [isTyping, setIsTyping]       = useState(false);
 
-  useEffect(() => {
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      recognitionRef.current = new SR();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      setSpeechSupported(true);
-      recognitionRef.current.onresult = (e: any) => {
-        let t = '';
-        for (let i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript;
-        setTranscript(t);
-      };
-      recognitionRef.current.onend = () => setIsListening(false);
+  const recorderRef     = useRef<MediaRecorder | null>(null);
+  const chunksRef       = useRef<Blob[]>([]);
+  const streamRef       = useRef<MediaStream | null>(null);
+  const chatBottomRef   = useRef<HTMLDivElement>(null);
+
+  // ── LIVE TAB state ─────────────────────────────────────────────────────────
+  const [liveAudioSrc, setLiveAudioSrc] = useState<AudioSrc>('mic');
+  const [liveStatus, setLiveStatus]     = useState<LiveStatus>('idle');
+  const [liveError, setLiveError]       = useState('');
+  const [liveMsgs, setLiveMsgs]         = useState<LiveMsg[]>([]);
+  const [streamingAI, setStreamingAI]   = useState('');
+  const [userSpeaking, setUserSpeaking] = useState(false);
+  const [aiSpeaking, setAiSpeaking]     = useState(false);
+
+  const pcRef         = useRef<RTCPeerConnection | null>(null);
+  const dcRef         = useRef<RTCDataChannel | null>(null);
+  const audioElRef    = useRef<HTMLAudioElement | null>(null);
+  const localTrackRef = useRef<MediaStreamTrack | null>(null);
+  const liveBottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMsgs, isTyping]);
+  useEffect(() => { liveBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [liveMsgs, streamingAI]);
+
+  // ── Chat helpers ──────────────────────────────────────────────────────────
+  const startRecording = async (src: AudioSrc) => {
+    try {
+      let stream: MediaStream;
+      if (src === 'mic') {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      } else {
+        const srcId = await window.electronAPI.getDesktopAudioSource();
+        if (!srcId) throw new Error('No desktop audio source found');
+        const s = await navigator.mediaDevices.getUserMedia({
+          audio: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: srcId } } as any,
+          video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: srcId, maxWidth: 1, maxHeight: 1 } } as any,
+        });
+        s.getVideoTracks().forEach(t => t.stop());
+        stream = new MediaStream(s.getAudioTracks());
+      }
+      streamRef.current = stream;
+      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+      const rec = new MediaRecorder(stream, { mimeType: mime });
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      rec.start(1000);
+      recorderRef.current = rec;
+      setIsRecording(true);
+    } catch (e: any) { alert('Audio error: ' + e.message); }
+  };
+
+  const stopRecording = async () => {
+    const rec = recorderRef.current;
+    if (!rec) return;
+    await new Promise<void>(res => { rec.onstop = () => res(); rec.stop(); });
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null; recorderRef.current = null;
+    setIsRecording(false);
+    if (!apiKey) { setTranscript('[API key missing]'); return; }
+    const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+    chunksRef.current = [];
+    if (blob.size < 1000) { setTranscript('[No audio captured]'); return; }
+    setIsTranscribing(true);
+    try { setTranscript(await transcribeAudio(apiKey, blob)); }
+    catch (e: any) { setTranscript('[Transcription failed: ' + e.message + ']'); }
+    finally { setIsTranscribing(false); }
+  };
+
+  const sendChat = async (text: string) => {
+    if (!text.trim() || isTyping) return;
+    const msg = text.trim();
+    setChatMsgs(p => [...p, { role: 'user', content: msg }]);
+    setTranscript('');
+    if (!apiKey) { setChatMsgs(p => [...p, { role: 'assistant', content: 'Please set your OpenAI API key in Settings.' }]); return; }
+    setIsTyping(true);
+    const hist = chatMsgs;
+    try {
+      const sys = currentSolution
+        ? `You are an expert interview assistant. The user is solving: "${currentProblem}". Summary: "${currentSolution.summary}". Approach: "${currentSolution.approach}". Answer follow-ups clearly.`
+        : 'You are a helpful coding interview assistant. Answer concisely.';
+      const reply = await chatWithAI(apiKey, msg, hist, sys, selectedModel, reasoningEffort);
+      setChatMsgs(p => [...p, { role: 'assistant', content: reply }]);
+    } catch (e: any) {
+      setChatMsgs(p => [...p, { role: 'assistant', content: 'Error: ' + (e?.message ?? 'Unknown') }]);
+    } finally { setIsTyping(false); }
+  };
+
+  // ── Live Voice: connect ───────────────────────────────────────────────────
+  const connectLive = useCallback(async () => {
+    if (!apiKey) { setLiveError('OpenAI API key is required. Set it in Settings.'); setLiveStatus('error'); return; }
+    setLiveStatus('connecting'); setLiveError(''); setLiveMsgs([]); setStreamingAI('');
+
+    try {
+      // Get audio track
+      let audioTrack: MediaStreamTrack;
+      if (liveAudioSrc === 'mic') {
+        const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        audioTrack = s.getAudioTracks()[0];
+      } else {
+        const srcId = await window.electronAPI.getDesktopAudioSource();
+        if (!srcId) throw new Error('No desktop audio source found');
+        const s = await navigator.mediaDevices.getUserMedia({
+          audio: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: srcId } } as any,
+          video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: srcId, maxWidth: 1, maxHeight: 1 } } as any,
+        });
+        s.getVideoTracks().forEach(t => t.stop());
+        audioTrack = s.getAudioTracks()[0];
+      }
+      localTrackRef.current = audioTrack;
+
+      const pc = new RTCPeerConnection();
+      pcRef.current = pc;
+
+      // AI voice output element
+      const audioEl = document.createElement('audio');
+      audioEl.autoplay = true;
+      audioElRef.current = audioEl;
+      pc.ontrack = (e) => { audioEl.srcObject = e.streams[0]; };
+
+      pc.addTrack(audioTrack);
+
+      // Data channel for JSON events
+      const dc = pc.createDataChannel('oai-events');
+      dcRef.current = dc;
+
+      dc.addEventListener('open', () => {
+        const isSysAudio = liveAudioSrc === 'system';
+        const instructions = currentSolution
+          ? `You are an expert coding interview assistant. ${isSysAudio ? 'You are listening to an interviewer speaking. Analyze their question and give the user concise hints and approaches — do NOT give the full answer.' : `The user is solving: "${currentProblem}". Help them with hints, explanations, and guidance. Be conversational.`}`
+          : `You are an expert coding interview assistant. ${isSysAudio ? 'Listen to the interviewer and give the user silent hints and advice.' : 'Help the user practice coding interviews. Be conversational, encouraging, and precise.'}`;
+
+        dc.send(JSON.stringify({
+          type: 'session.update',
+          session: {
+            modalities: isSysAudio ? ['text'] : ['text', 'audio'],
+            instructions,
+            voice: 'alloy',
+            input_audio_transcription: { model: 'whisper-1' },
+            turn_detection: { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 700 },
+          },
+        }));
+        setLiveStatus('connected');
+      });
+
+      dc.addEventListener('message', (e) => {
+        try {
+          const ev = JSON.parse(e.data);
+          switch (ev.type) {
+            case 'input_audio_buffer.speech_started':
+              setUserSpeaking(true); break;
+            case 'input_audio_buffer.speech_stopped':
+              setUserSpeaking(false); break;
+            case 'conversation.item.input_audio_transcription.completed':
+              if (ev.transcript?.trim()) setLiveMsgs(p => [...p, { id: uid(), role: 'user', text: ev.transcript.trim() }]);
+              break;
+            case 'response.created':
+              setAiSpeaking(true); setStreamingAI(''); break;
+            case 'response.audio_transcript.delta':
+            case 'response.text.delta':
+              setStreamingAI(p => p + (ev.delta ?? '')); break;
+            case 'response.audio_transcript.done':
+            case 'response.text.done': {
+              const final = (ev.transcript ?? ev.text ?? '').trim();
+              if (final) { setLiveMsgs(p => [...p, { id: uid(), role: 'ai', text: final }]); }
+              setStreamingAI(''); setAiSpeaking(false); break;
+            }
+            case 'response.done':
+              setAiSpeaking(false); break;
+            case 'error':
+              setLiveError(ev.error?.message ?? 'Realtime API error');
+              console.error('Realtime error:', ev.error); break;
+          }
+        } catch { /* non-JSON frame */ }
+      });
+
+      pc.addEventListener('connectionstatechange', () => {
+        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+          setLiveStatus('error'); setLiveError('Connection lost. Try reconnecting.');
+        }
+      });
+
+      // SDP exchange
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const resp = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview', {
+        method: 'POST',
+        body: offer.sdp,
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/sdp' },
+      });
+      if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(`OpenAI ${resp.status}: ${err}`);
+      }
+      const answerSdp = await resp.text();
+      await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+
+    } catch (e: any) {
+      console.error('Live connect error:', e);
+      setLiveError(e?.message ?? 'Failed to connect');
+      setLiveStatus('error');
+      disconnectLive();
     }
-    return () => recognitionRef.current?.stop();
+  }, [apiKey, liveAudioSrc, currentProblem, currentSolution]);
+
+  const disconnectLive = useCallback(() => {
+    dcRef.current?.close(); dcRef.current = null;
+    pcRef.current?.close(); pcRef.current = null;
+    localTrackRef.current?.stop(); localTrackRef.current = null;
+    if (audioElRef.current) { audioElRef.current.srcObject = null; audioElRef.current = null; }
+    setLiveStatus('idle'); setUserSpeaking(false); setAiSpeaking(false); setStreamingAI('');
   }, []);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping]);
-
-  const toggleListen = () => {
-    if (!recognitionRef.current) {
-      setMessages(p => [...p, { role: 'assistant', content: 'Voice input unavailable. You can still type.' }]);
-      return;
-    }
-    if (isListening) { recognitionRef.current.stop(); setIsListening(false); }
-    else { setTranscript(''); recognitionRef.current.start(); setIsListening(true); }
-  };
-
-  const send = async (text: string) => {
-    if (!text.trim()) return;
-    const userMsg = text.trim();
-    setMessages(p => [...p, { role: 'user', content: userMsg }]);
-    setTranscript('');
-    if (isListening) toggleListen();
-
-    if (!apiKey) {
-      setMessages(p => [...p, { role: 'assistant', content: 'Please configure your OpenAI API key in Settings.' }]);
-      return;
-    }
-
-    setIsTyping(true);
-    try {
-      const system = currentSolution
-        ? `You are an expert interview assistant. The user is solving: "${currentProblem}". Solution summary: "${currentSolution.summary}". Approach: "${currentSolution.approach}". Answer follow-up questions clearly and concisely.`
-        : 'You are a helpful interview assistant. Answer questions clearly and concisely.';
-
-      const reply = await chatWithAI(apiKey, userMsg, messages, system, selectedModel, reasoningEffort);
-      setMessages(p => [...p, { role: 'assistant', content: reply }]);
-    } catch {
-      setMessages(p => [...p, { role: 'assistant', content: 'Error connecting to AI.' }]);
-    } finally {
-      setIsTyping(false);
-    }
-  };
-
-  const clearChat = () => {
-    if (isListening) toggleListen();
-    setMessages([]);
-    setTranscript('');
-  };
+  useEffect(() => () => disconnectLive(), [disconnectLive]);
 
   const QUICK = ['Explain this solution', 'Optimize space complexity', 'Edge cases?', 'Time complexity?'];
 
+  // ─── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full">
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
-        <span className="text-xs font-medium text-foreground/50 flex items-center gap-1.5">
-          <Bot size={12} className="text-accent" /> AI Chat
-          {!speechSupported && <span className="text-[10px] text-foreground/30">· type only</span>}
-        </span>
-        {messages.length > 0 && (
-          <button
-            onClick={clearChat}
-            className="flex items-center gap-1 text-[10px] text-foreground/30 hover:text-red-400 transition-colors px-2 py-1 rounded-md hover:bg-red-500/8"
-          >
-            <Trash2 size={10} /> Clear
+      {/* Top tabs */}
+      <div className="flex border-b border-border shrink-0 bg-panel/40">
+        {([['chat', Bot, 'Chat'], ['live', Radio, 'Live Voice']] as const).map(([id, Icon, label]) => (
+          <button key={id} onClick={() => setTab(id as Tab)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors relative
+              ${tab === id ? 'text-accent' : 'text-foreground/40 hover:text-foreground/70'}`}>
+            <Icon size={13} /> {label}
+            {tab === id && <span className="absolute bottom-0 inset-x-4 h-0.5 bg-accent rounded-t-full" />}
+            {id === 'live' && liveStatus === 'connected' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse ml-0.5" />
+            )}
           </button>
-        )}
+        ))}
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5 no-scrollbar">
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-4 select-none">
-            <div className="w-10 h-10 rounded-2xl bg-accent/10 flex items-center justify-center">
-              <Bot size={20} className="text-accent" />
+      {/* ── CHAT TAB ───────────────────────────────────────────────────────── */}
+      {tab === 'chat' && (
+        <div className="flex flex-col flex-1 min-h-0">
+          {/* Header */}
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
+            <div className="flex items-center gap-1 bg-background border border-border rounded-lg p-0.5">
+              <button onClick={() => { if (isRecording) stopRecording(); setInputMode('mic'); }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${inputMode === 'mic' ? 'bg-panel text-accent shadow-sm' : 'text-foreground/45 hover:text-foreground/70'}`}>
+                <Mic size={11} /> Mic
+              </button>
+              <button onClick={() => { if (isRecording) stopRecording(); setInputMode('system'); }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${inputMode === 'system' ? 'bg-panel text-accent shadow-sm' : 'text-foreground/45 hover:text-foreground/70'}`}>
+                <Volume2 size={11} /> Speaker
+              </button>
             </div>
-            <div className="text-center">
-              <p className="text-sm font-medium text-foreground/60">Ask me anything</p>
-              <p className="text-xs text-foreground/30 mt-0.5">About the captured problem or general coding</p>
-            </div>
-            <div className="flex flex-wrap justify-center gap-1.5 mt-1">
-              {QUICK.map(q => (
-                <button
-                  key={q}
-                  onClick={() => send(q)}
-                  className="px-2.5 py-1 bg-panel border border-border rounded-full text-[11px] text-foreground/60 hover:text-accent hover:border-accent/40 transition-colors"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
+            {chatMsgs.length > 0 && (
+              <button onClick={() => { setChatMsgs([]); setTranscript(''); }}
+                className="flex items-center gap-1 text-[10px] text-foreground/30 hover:text-red-400 px-2 py-1 rounded-md hover:bg-red-500/10 transition-colors">
+                <Trash2 size={10} /> Clear
+              </button>
+            )}
           </div>
-        ) : (
-          <>
-            {messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed
-                  ${m.role === 'user'
-                    ? 'bg-accent text-white rounded-br-sm'
-                    : 'bg-panel border border-border text-foreground/80 rounded-bl-sm'}`}
-                >
-                  {m.content}
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5 no-scrollbar min-h-0">
+            {chatMsgs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-4 select-none">
+                <div className="w-10 h-10 rounded-2xl bg-accent/10 flex items-center justify-center"><Bot size={20} className="text-accent" /></div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-foreground/60">Ask me anything</p>
+                  <p className="text-xs text-foreground/30 mt-0.5">Type, record via mic, or capture speaker output</p>
                 </div>
-              </div>
-            ))}
-            {isTyping && (
-              <div className="flex justify-start">
-                <div className="flex items-center gap-1 px-3 py-2.5 bg-panel border border-border rounded-2xl rounded-bl-sm">
-                  {[0, 0.15, 0.3].map((d, i) => (
-                    <span
-                      key={i}
-                      className="w-1.5 h-1.5 rounded-full bg-foreground/30 animate-bounce"
-                      style={{ animationDelay: `${d}s`, animationDuration: '0.9s' }}
-                    />
+                <div className="flex flex-wrap justify-center gap-1.5">
+                  {QUICK.map(q => (
+                    <button key={q} onClick={() => sendChat(q)} disabled={isTyping}
+                      className="px-2.5 py-1 bg-panel border border-border rounded-full text-[11px] text-foreground/60 hover:text-accent hover:border-accent/40 disabled:opacity-40 transition-colors">{q}</button>
                   ))}
                 </div>
               </div>
+            ) : (
+              <>
+                {chatMsgs.map((m, i) => (
+                  <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed
+                      ${m.role === 'user' ? 'bg-accent text-white rounded-br-sm' : 'bg-panel border border-border text-foreground/80 rounded-bl-sm'}`}>
+                      {m.content}
+                    </div>
+                  </div>
+                ))}
+                {isTyping && (
+                  <div className="flex justify-start">
+                    <div className="flex items-center gap-1 px-3 py-2.5 bg-panel border border-border rounded-2xl rounded-bl-sm">
+                      {[0, 0.15, 0.3].map((d, i) => <span key={i} className="w-1.5 h-1.5 rounded-full bg-foreground/30 animate-bounce" style={{ animationDelay: `${d}s`, animationDuration: '0.9s' }} />)}
+                    </div>
+                  </div>
+                )}
+                <div ref={chatBottomRef} />
+              </>
             )}
-            <div ref={bottomRef} />
-          </>
-        )}
-      </div>
+          </div>
 
-      {/* Input bar */}
-      <div className="shrink-0 p-3 border-t border-border">
-        <div className="flex items-center gap-2 bg-panel border border-border rounded-xl px-1 py-1">
-          <button
-            onClick={toggleListen}
-            className={`p-2 rounded-lg transition-colors shrink-0
-              ${isListening
-                ? 'bg-red-500/15 text-red-400'
-                : 'text-foreground/40 hover:text-foreground/70 hover:bg-foreground/5'}`}
-          >
-            {isListening ? <MicOff size={16} /> : <Mic size={16} />}
-          </button>
-          <input
-            type="text"
-            value={transcript}
-            onChange={(e) => setTranscript(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && send(transcript)}
-            placeholder={isListening ? 'Listening…' : 'Type a question…'}
-            className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-foreground/25 min-w-0"
-          />
-          <button
-            onClick={() => send(transcript)}
-            disabled={!transcript.trim()}
-            className="p-2 rounded-lg bg-accent text-white hover:bg-accent/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0"
-          >
-            <Send size={14} />
-          </button>
+          {/* Input */}
+          <div className="shrink-0 p-3 border-t border-border space-y-2">
+            {isRecording && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                <span className="text-xs text-red-400 font-medium flex-1">
+                  {inputMode === 'mic' ? 'Recording mic…' : 'Recording speaker output…'}
+                </span>
+                <span className="text-[10px] text-red-400/60">click ■ to stop & transcribe</span>
+              </div>
+            )}
+            {isTranscribing && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-accent/10 border border-accent/20 rounded-lg">
+                <Loader2 size={12} className="text-accent animate-spin" />
+                <span className="text-xs text-accent font-medium">Transcribing with Whisper…</span>
+              </div>
+            )}
+            <div className="flex items-center gap-2 bg-panel border border-border rounded-xl px-1 py-1">
+              <button onClick={isRecording ? stopRecording : () => startRecording(inputMode)} disabled={isTranscribing}
+                className={`p-2 rounded-lg transition-colors shrink-0 ${isRecording ? 'bg-red-500/15 text-red-400' : 'text-foreground/40 hover:text-foreground/70 hover:bg-foreground/5'}`}>
+                {isRecording ? <Square size={16} /> : inputMode === 'mic' ? <Mic size={16} /> : <Volume2 size={16} />}
+              </button>
+              <input type="text" value={transcript} onChange={e => setTranscript(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendChat(transcript)}
+                placeholder={isRecording ? 'Recording…' : isTranscribing ? 'Transcribing…' : 'Type a question…'}
+                disabled={isTranscribing}
+                className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-foreground/25 min-w-0 disabled:opacity-50" />
+              <button onClick={() => sendChat(transcript)} disabled={!transcript.trim() || isTyping || isTranscribing}
+                className="p-2 rounded-lg bg-accent text-white hover:bg-accent/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0">
+                <Send size={14} />
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ── LIVE VOICE TAB ─────────────────────────────────────────────────── */}
+      {tab === 'live' && (
+        <div className="flex flex-col flex-1 min-h-0">
+
+          {liveStatus !== 'connected' ? (
+            /* ─ Disconnected screen ─ */
+            <div className="flex flex-col items-center justify-center flex-1 gap-5 p-6 select-none">
+              <div className={`w-16 h-16 rounded-3xl flex items-center justify-center
+                ${liveStatus === 'connecting' ? 'bg-accent/10' : liveStatus === 'error' ? 'bg-red-500/10' : 'bg-accent/10'}`}>
+                {liveStatus === 'connecting'
+                  ? <Loader2 size={28} className="text-accent animate-spin" />
+                  : <AudioWaveform size={28} className={liveStatus === 'error' ? 'text-red-400' : 'text-accent'} />}
+              </div>
+
+              <div className="text-center">
+                <p className="text-sm font-semibold text-foreground/80">
+                  {liveStatus === 'connecting' ? 'Connecting…' : liveStatus === 'error' ? 'Connection failed' : 'Live Voice'}
+                </p>
+                <p className="text-xs text-foreground/40 mt-1 max-w-[220px] leading-relaxed">
+                  {liveStatus === 'error'
+                    ? liveError
+                    : 'Real-time conversation with AI using OpenAI Realtime API'}
+                </p>
+              </div>
+
+              {/* Audio source selector */}
+              {liveStatus !== 'connecting' && (
+                <div className="flex bg-background border border-border rounded-lg p-0.5 w-full max-w-[240px]">
+                  <button onClick={() => setLiveAudioSrc('mic')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-all
+                      ${liveAudioSrc === 'mic' ? 'bg-panel text-accent shadow-sm' : 'text-foreground/45 hover:text-foreground/70'}`}>
+                    <Mic size={12} /> Microphone
+                  </button>
+                  <button onClick={() => setLiveAudioSrc('system')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-all
+                      ${liveAudioSrc === 'system' ? 'bg-panel text-accent shadow-sm' : 'text-foreground/45 hover:text-foreground/70'}`}>
+                    <Volume2 size={12} /> Speaker
+                  </button>
+                </div>
+              )}
+
+              <p className="text-[10px] text-foreground/30 text-center max-w-[220px] leading-relaxed">
+                {liveAudioSrc === 'mic'
+                  ? 'Speak directly — AI responds with voice in real time'
+                  : 'Captures speaker output — AI gives you silent text hints as the interviewer speaks'}
+              </p>
+
+              {liveStatus !== 'connecting' && (
+                <button onClick={connectLive}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent/90 transition-all shadow-sm shadow-accent/20 active:scale-[0.98]">
+                  <PhoneCall size={15} /> Start Live Session
+                </button>
+              )}
+            </div>
+          ) : (
+            /* ─ Connected screen ─ */
+            <div className="flex flex-col flex-1 min-h-0">
+
+              {/* Status bar */}
+              <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-xs font-medium text-green-400">Live</span>
+                  <span className="text-[10px] text-foreground/30">
+                    · {liveAudioSrc === 'mic' ? 'Microphone' : 'Speaker output'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {userSpeaking && (
+                    <span className="flex items-center gap-1 text-[10px] text-blue-400 font-medium">
+                      <Mic size={10} className="animate-pulse" /> You
+                    </span>
+                  )}
+                  {aiSpeaking && (
+                    <span className="flex items-center gap-1 text-[10px] text-accent font-medium">
+                      <Sparkles size={10} className="animate-pulse" /> AI
+                    </span>
+                  )}
+                  <button onClick={disconnectLive}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg hover:bg-red-500/15 transition-colors">
+                    <PhoneOff size={11} /> End
+                  </button>
+                </div>
+              </div>
+
+              {/* Transcript */}
+              <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5 no-scrollbar min-h-0">
+                {liveMsgs.length === 0 && !streamingAI ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-3 text-foreground/25 select-none">
+                    <AudioWaveform size={28} />
+                    <p className="text-xs text-center">
+                      {liveAudioSrc === 'mic' ? 'Start speaking — AI is listening' : 'AI is listening to speaker output…'}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {liveMsgs.map(m => (
+                      <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed
+                          ${m.role === 'user'
+                            ? 'bg-blue-500/15 text-blue-300 border border-blue-500/20 rounded-br-sm'
+                            : 'bg-panel border border-border text-foreground/80 rounded-bl-sm'}`}>
+                          {m.role === 'user' && <span className="text-[10px] text-blue-400/60 block mb-0.5">{liveAudioSrc === 'system' ? 'Interviewer' : 'You'}</span>}
+                          {m.role === 'ai' && <span className="text-[10px] text-accent/60 block mb-0.5 flex items-center gap-1"><Sparkles size={9} /> AI</span>}
+                          {m.text}
+                        </div>
+                      </div>
+                    ))}
+                    {/* Streaming AI response */}
+                    {streamingAI && (
+                      <div className="flex justify-start">
+                        <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-bl-sm text-sm bg-panel border border-border text-foreground/80 leading-relaxed">
+                          <span className="text-[10px] text-accent/60 block mb-0.5 flex items-center gap-1"><Sparkles size={9} /> AI</span>
+                          {streamingAI}<span className="inline-block w-1 h-3.5 bg-accent/60 ml-0.5 animate-pulse rounded-sm" />
+                        </div>
+                      </div>
+                    )}
+                    <div ref={liveBottomRef} />
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('electronAPI', {
   captureScreen: () => ipcRenderer.invoke('capture-screen'),
   captureArea: () => ipcRenderer.invoke('start-area-select'),
+  getDesktopAudioSource: () => ipcRenderer.invoke('get-desktop-audio-source'),
   setOpacity: (value: number) => ipcRenderer.invoke('set-opacity', value),
   toggleAlwaysOnTop: (enable: boolean) => ipcRenderer.invoke('toggle-always-on-top', enable),
   closeApp: () => ipcRenderer.invoke('close-app'),

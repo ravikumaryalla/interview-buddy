@@ -145,6 +145,14 @@ Return ONLY a raw JSON object string with the following format (no markdown code
   }
 }
 
+export async function transcribeAudio(apiKey: string, audioBlob: Blob): Promise<string> {
+  if (!apiKey) throw new Error('OpenAI API Key is missing');
+  const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+  const file = new File([audioBlob], 'audio.webm', { type: audioBlob.type || 'audio/webm' });
+  const result = await client.audio.transcriptions.create({ model: 'whisper-1', file, language: 'en' });
+  return result.text;
+}
+
 export async function answerWithCustomPrompt(
   apiKey: string,
   extractedText: string,

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, screen as electronScreen } from 'electron';
+import { app, BrowserWindow, ipcMain, globalShortcut, screen as electronScreen, desktopCapturer } from 'electron';
 import * as path from 'path';
 import Store from 'electron-store';
 const screenshot = require('screenshot-desktop');
@@ -216,6 +216,16 @@ ipcMain.handle('capture-screen', async () => {
     console.error('Failed to capture screen', error);
     // mainWindow?.setOpacity(currentOpacity);
     throw error;
+  }
+});
+
+// Returns the first screen source ID for system audio loopback capture
+ipcMain.handle('get-desktop-audio-source', async () => {
+  try {
+    const sources = await desktopCapturer.getSources({ types: ['screen'] });
+    return sources.length > 0 ? sources[0].id : null;
+  } catch {
+    return null;
   }
 });
 
