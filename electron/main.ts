@@ -1,9 +1,15 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, screen as electronScreen, desktopCapturer } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  globalShortcut,
+  screen as electronScreen,
+  desktopCapturer,
+} from 'electron';
 import * as path from 'path';
 import Store from 'electron-store';
 const screenshot = require('screenshot-desktop');
 import * as fs from 'fs';
-
 // Initialize the store for data persistence
 const store = new Store();
 
@@ -22,6 +28,7 @@ const createWindow = () => {
     frame: false, // Frameless window
     transparent: true,
     alwaysOnTop: isAlwaysOnTop,
+    icon: path.join(__dirname, '../public/interview_buddy_icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -208,7 +215,7 @@ ipcMain.handle('capture-screen', async () => {
 
     const imgBuffer = await screenshot({ format: 'png' });
     const base64Img = imgBuffer.toString('base64');
-    
+
     // mainWindow?.setOpacity(currentOpacity);
 
     return `data:image/png;base64,${base64Img}`;
@@ -230,7 +237,10 @@ ipcMain.handle('get-desktop-audio-source', async () => {
 });
 
 ipcMain.handle('start-area-select', () => {
-  return new Promise<{ image: string; region: { x: number; y: number; w: number; h: number } } | null>((resolve) => {
+  return new Promise<{
+    image: string;
+    region: { x: number; y: number; w: number; h: number };
+  } | null>((resolve) => {
     const display = electronScreen.getPrimaryDisplay();
     const scaleFactor = display.scaleFactor;
 
@@ -252,11 +262,18 @@ ipcMain.handle('start-area-select', () => {
         },
       });
 
-      selectorWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(SELECTOR_HTML)}`);
+      selectorWin.loadURL(
+        `data:text/html;charset=utf-8,${encodeURIComponent(SELECTOR_HTML)}`,
+      );
 
       let settled = false;
 
-      const settle = async (region?: { x: number; y: number; w: number; h: number }) => {
+      const settle = async (region?: {
+        x: number;
+        y: number;
+        w: number;
+        h: number;
+      }) => {
         if (settled) return;
         settled = true;
         ipcMain.removeListener('selection-made', onMade);
@@ -285,7 +302,10 @@ ipcMain.handle('start-area-select', () => {
         }
       };
 
-      const onMade = (_: any, region: { x: number; y: number; w: number; h: number }) => settle(region);
+      const onMade = (
+        _: any,
+        region: { x: number; y: number; w: number; h: number },
+      ) => settle(region);
       const onCancelled = () => settle();
 
       ipcMain.on('selection-made', onMade);
@@ -332,18 +352,21 @@ ipcMain.handle('store-set', (event, key: string, value: any) => {
   store.set(key, value);
 });
 
-ipcMain.handle('export-markdown', async (event, filename: string, content: string) => {
-  const { dialog } = require('electron');
-  
-  const result = await dialog.showSaveDialog(mainWindow!, {
-    title: 'Export Solution as Markdown',
-    defaultPath: filename,
-    filters: [{ name: 'Markdown', extensions: ['md'] }]
-  });
+ipcMain.handle(
+  'export-markdown',
+  async (event, filename: string, content: string) => {
+    const { dialog } = require('electron');
 
-  if (!result.canceled && result.filePath) {
-    fs.writeFileSync(result.filePath, content, 'utf-8');
-    return true;
-  }
-  return false;
-});
+    const result = await dialog.showSaveDialog(mainWindow!, {
+      title: 'Export Solution as Markdown',
+      defaultPath: filename,
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+    });
+
+    if (!result.canceled && result.filePath) {
+      fs.writeFileSync(result.filePath, content, 'utf-8');
+      return true;
+    }
+    return false;
+  },
+);
