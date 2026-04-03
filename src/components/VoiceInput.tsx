@@ -3,8 +3,11 @@ import {
   Mic, Send, Trash2, Bot, Volume2, Square,
   Loader2, Radio, PhoneOff, PhoneCall, Sparkles, AudioWaveform
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useAppStore } from '../store/useAppStore';
-import { chatWithAI, transcribeAudio } from '../lib/ai';
+import { chatWithAI, transcribeAudio, getRealtimeToken } from '../lib/ai';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Tab        = 'chat' | 'live';
@@ -16,9 +19,20 @@ interface LiveMsg { id: string; role: 'user' | 'ai'; text: string }
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function uid() { return Math.random().toString(36).slice(2); }
 
+// Safely extract a plain string from ReactNode (react-markdown v10 may pass elements, not raw strings)
+function toCodeString(node: React.ReactNode): string {
+  if (typeof node === 'string') return node
+  if (Array.isArray(node)) return node.map(toCodeString).join('')
+  if (React.isValidElement(node)) {
+    const el = node as React.ReactElement<{ children?: React.ReactNode }>
+    return toCodeString(el.props.children)
+  }
+  return ''
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 export const VoiceInput: React.FC = () => {
-  const { apiKey, selectedModel, reasoningEffort, currentSolution, currentProblem } = useAppStore();
+  const { selectedModel, currentSolution, currentProblem, setCredits } = useAppStore();
   const [tab, setTab] = useState<Tab>('chat');
 
   // ── CHAT TAB state ─────────────────────────────────────────────────────────
@@ -86,12 +100,11 @@ export const VoiceInput: React.FC = () => {
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null; recorderRef.current = null;
     setIsRecording(false);
-    if (!apiKey) { setTranscript('[API key missing]'); return; }
     const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
     chunksRef.current = [];
     if (blob.size < 1000) { setTranscript('[No audio captured]'); return; }
     setIsTranscribing(true);
-    try { setTranscript(await transcribeAudio(apiKey, blob)); }
+    try { setTranscript(await transcribeAudio(blob)); }
     catch (e: any) { setTranscript('[Transcription failed: ' + e.message + ']'); }
     finally { setIsTranscribing(false); }
   };
@@ -101,15 +114,19 @@ export const VoiceInput: React.FC = () => {
     const msg = text.trim();
     setChatMsgs(p => [...p, { role: 'user', content: msg }]);
     setTranscript('');
-    if (!apiKey) { setChatMsgs(p => [...p, { role: 'assistant', content: 'Please set your OpenAI API key in Settings.' }]); return; }
     setIsTyping(true);
     const hist = chatMsgs;
     try {
       const sys = currentSolution
         ? `You are an expert interview assistant. The user is solving: "${currentProblem}". Summary: "${currentSolution.summary}". Approach: "${currentSolution.approach}". Answer follow-ups clearly.`
         : 'You are a helpful coding interview assistant. Answer concisely.';
-      const reply = await chatWithAI(apiKey, msg, hist, sys, selectedModel, reasoningEffort);
-      setChatMsgs(p => [...p, { role: 'assistant', content: reply }]);
+      setChatMsgs(p => [...p, { role: 'assistant', content: '' }]);
+      await chatWithAI(msg, hist, sys, selectedModel, (delta) => {
+        setChatMsgs(p => {
+          const last = p[p.length - 1];
+          return [...p.slice(0, -1), { ...last, content: last.content + delta }];
+        });
+      });
     } catch (e: any) {
       setChatMsgs(p => [...p, { role: 'assistant', content: 'Error: ' + (e?.message ?? 'Unknown') }]);
     } finally { setIsTyping(false); }
@@ -117,7 +134,6 @@ export const VoiceInput: React.FC = () => {
 
   // ── Live Voice: connect ───────────────────────────────────────────────────
   const connectLive = useCallback(async () => {
-    if (!apiKey) { setLiveError('OpenAI API key is required. Set it in Settings.'); setLiveStatus('error'); return; }
     setLiveStatus('connecting'); setLiveError(''); setLiveMsgs([]); setStreamingAI('');
 
     try {
@@ -209,14 +225,20 @@ export const VoiceInput: React.FC = () => {
         }
       });
 
-      // SDP exchange
+      // SDP exchange — get ephemeral token from backend first
+      const ephemeralToken = await getRealtimeToken();
+      // Deduct credits, then refresh balance
+      const { api } = await import('../lib/api');
+      const me = await api.user.me();
+      setCredits(me.credits);
+
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
       const resp = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview', {
         method: 'POST',
         body: offer.sdp,
-        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/sdp' },
+        headers: { Authorization: `Bearer ${ephemeralToken}`, 'Content-Type': 'application/sdp' },
       });
       if (!resp.ok) {
         const err = await resp.text();
@@ -231,7 +253,7 @@ export const VoiceInput: React.FC = () => {
       setLiveStatus('error');
       disconnectLive();
     }
-  }, [apiKey, liveAudioSrc, currentProblem, currentSolution]);
+  }, [liveAudioSrc, currentProblem, currentSolution, setCredits]);
 
   const disconnectLive = useCallback(() => {
     dcRef.current?.close(); dcRef.current = null;
@@ -309,7 +331,34 @@ export const VoiceInput: React.FC = () => {
                   <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed
                       ${m.role === 'user' ? 'bg-accent text-white rounded-br-sm' : 'bg-panel border border-border text-foreground/80 rounded-bl-sm'}`}>
-                      {m.content}
+                      {m.role === 'user' ? m.content : (
+                        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-2 prose-pre:p-0 prose-pre:bg-transparent">
+                          <ReactMarkdown
+                            components={{
+                              code({ className, children }) {
+                                const match = /language-(\w+)/.exec(className || '')
+                                const code = toCodeString(children).replace(/\n$/, '')
+                                return match ? (
+                                  <div className="rounded-lg overflow-hidden my-1.5">
+                                    <SyntaxHighlighter
+                                      language={match[1]}
+                                      style={vscDarkPlus}
+                                      PreTag="div"
+                                      customStyle={{ margin: 0, padding: '0.65rem 0.85rem', fontSize: '0.74rem', background: 'rgba(0,0,0,0.5)' }}
+                                    >
+                                      {code}
+                                    </SyntaxHighlighter>
+                                  </div>
+                                ) : (
+                                  <code className="bg-black/25 px-1 py-0.5 rounded text-[0.8em] font-mono">{children}</code>
+                                )
+                              },
+                            }}
+                          >
+                            {m.content}
+                          </ReactMarkdown>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

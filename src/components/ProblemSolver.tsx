@@ -10,10 +10,10 @@ export const ProblemSolver: React.FC = () => {
   const {
     currentProblem, currentSolution, setCurrentSolution,
     promptMode, customPrompt, customResponse, setCustomResponse,
-    apiKey, selectedModel, reasoningEffort,
+    selectedModel, reasoningEffort,
     isSolving, setIsSolving,
     selectedLanguage, setSelectedLanguage,
-    saveToHistory,
+    saveToHistory, setCredits,
   } = useAppStore();
 
   const [editableProblem, setEditableProblem] = useState(currentProblem);
@@ -25,25 +25,31 @@ export const ProblemSolver: React.FC = () => {
   }, [currentProblem]);
 
   const handleSolve = async () => {
-    if (!apiKey) {
-      alert('Please enter an OpenAI API key in Settings first.');
-      return;
-    }
     setIsSolving(true);
     try {
       if (promptMode === 'coding') {
-        const solution: AISolution = await solveProblemWithAI(apiKey, editableProblem, selectedModel, reasoningEffort);
+        const solution: AISolution = await solveProblemWithAI(editableProblem, selectedModel, reasoningEffort);
         setCurrentSolution(solution);
         saveToHistory({ problem: editableProblem, solution });
         setProblemExpanded(false);
       } else {
         const prompt = customPrompt.trim() || 'Analyze the following content and provide a detailed, helpful response.';
-        const response = await answerWithCustomPrompt(apiKey, editableProblem, prompt, selectedModel, reasoningEffort);
-        setCustomResponse(response);
+        setCustomResponse('');
         setProblemExpanded(false);
+        await answerWithCustomPrompt(editableProblem, prompt, selectedModel, (delta) =>
+          setCustomResponse(prev => prev + delta)
+        );
       }
+      // Refresh credit balance after use
+      const { api } = await import('../lib/api');
+      const me = await api.user.me();
+      setCredits(me.credits);
     } catch (e: any) {
-      alert('AI request failed: ' + e.message);
+      if (e?.status === 402) {
+        alert('Not enough credits. Contact admin for more.');
+      } else {
+        alert('AI request failed: ' + e.message);
+      }
     } finally {
       setIsSolving(false);
     }
