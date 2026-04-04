@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Camera, Loader2, RotateCcw, Code2, MessageSquare, ScanText } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { extractTextFromImage } from '../lib/ocr';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export const ScreenCapture: React.FC = () => {
   const {
@@ -24,18 +26,15 @@ export const ScreenCapture: React.FC = () => {
     try {
       const result = await window.electronAPI.captureArea();
       if (!result) return;
-
       setIsProcessing(true);
       const img = new Image();
       img.src = result.image;
       await new Promise<void>((res) => { img.onload = () => res(); });
-
       const { x, y, w, h } = result.region;
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d')!.drawImage(img, x, y, w, h, 0, 0, w, h);
       const cropped = canvas.toDataURL('image/png');
-
       setPreviewUrl(cropped);
       const text = await extractTextFromImage(cropped);
       setCurrentSolution(null);
@@ -64,78 +63,69 @@ export const ScreenCapture: React.FC = () => {
     <div className="p-3 space-y-2.5">
 
       {/* Mode tabs */}
-      <div className="flex bg-background border border-border rounded-lg p-0.5">
-        <button
-          onClick={() => setPromptMode('coding')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-all
-            ${promptMode === 'coding' ? 'bg-panel text-accent shadow-sm' : 'text-foreground/50 hover:text-foreground/80'}`}
-        >
-          <Code2 size={12} /> Coding Problem
-        </button>
-        <button
-          onClick={() => setPromptMode('custom')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-all
-            ${promptMode === 'custom' ? 'bg-panel text-accent shadow-sm' : 'text-foreground/50 hover:text-foreground/80'}`}
-        >
-          <MessageSquare size={12} /> Custom Prompt
-        </button>
-      </div>
+      <Tabs value={promptMode} onValueChange={(v) => setPromptMode(v as 'coding' | 'custom')}>
+        <TabsList className="w-full">
+          <TabsTrigger value="coding" className="flex-1 text-xs gap-1.5">
+            <Code2 size={12} /> Coding Problem
+          </TabsTrigger>
+          <TabsTrigger value="custom" className="flex-1 text-xs gap-1.5">
+            <MessageSquare size={12} /> Custom Prompt
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {/* Custom prompt input */}
       {promptMode === 'custom' && (
         <textarea
           value={customPrompt}
           onChange={(e) => setCustomPrompt(e.target.value)}
-          placeholder="e.g. Explain this code, summarize this diagram, translate this text…"
+          placeholder="e.g. Explain this code, summarize this diagram…"
           rows={2}
-          className="w-full px-3 py-2 bg-panel border border-border rounded-lg text-xs outline-none focus:ring-1 focus:ring-accent/50 resize-none placeholder:text-foreground/25 transition-colors"
+          className="w-full px-3 py-2 bg-panel border border-[hsl(var(--input-border))] rounded-[var(--radius)] text-xs outline-none focus:border-accent/40 resize-none placeholder:text-foreground/25 transition-all anim-slide-up"
+          style={{ boxShadow: 'var(--shadow-sm)' }}
         />
       )}
 
       {/* Capture row */}
       <div className="flex gap-2">
-        <button
+        <Button
           onClick={handleCapture}
           disabled={busy}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all
-            ${busy
-              ? 'bg-accent/10 text-accent cursor-not-allowed'
-              : 'bg-accent text-white hover:bg-accent/90 shadow-sm shadow-accent/20 active:scale-[0.98]'}`}
+          className={`flex-1 h-9 text-sm ${busy ? 'opacity-70' : ''}`}
+          variant={busy ? 'outline' : 'default'}
         >
           {isSelecting ? (
-            <><Loader2 size={15} className="animate-spin" /> Selecting…</>
+            <><Loader2 size={14} className="animate-spin" /> Selecting…</>
           ) : isProcessing ? (
-            <><ScanText size={15} className="animate-pulse" /> Reading text…</>
+            <><ScanText size={14} className="animate-pulse" /> Reading text…</>
           ) : (
-            <><Camera size={15} /> Capture Area</>
+            <><Camera size={14} /> Capture Area</>
           )}
-        </button>
+        </Button>
 
         {hasCaptured && !busy && (
-          <button
+          <Button
             onClick={handleReset}
+            variant="outline"
+            size="icon"
             title="Clear capture"
-            className="px-3 py-2.5 rounded-lg border border-border text-foreground/40 hover:text-red-400 hover:bg-red-500/8 hover:border-red-500/20 transition-colors"
+            className="text-foreground/40 hover:text-red-400 hover:bg-red-500/8 hover:border-red-500/20"
           >
-            <RotateCcw size={14} />
-          </button>
+            <RotateCcw size={13} />
+          </Button>
         )}
       </div>
 
       {/* Preview */}
       {previewUrl && (
-        <div className="anim-fade-in rounded-lg overflow-hidden border border-border">
-          <img
-            src={previewUrl}
-            alt="Captured"
-            className="w-full object-contain max-h-[90px]"
-          />
+        <div className="anim-fade-in rounded-[var(--radius)] overflow-hidden border border-border" style={{ boxShadow: 'var(--shadow-sm)' }}>
+          <img src={previewUrl} alt="Captured" className="w-full object-contain max-h-[90px]" />
         </div>
       )}
 
       {!hasCaptured && !busy && (
         <p className="text-center text-[10px] text-foreground/25 pb-0.5">
-          Ctrl+Shift+S to capture
+          Press <kbd className="px-1 py-0.5 bg-foreground/5 border border-border rounded text-[9px] font-mono mx-0.5">Ctrl+Shift+S</kbd> to capture
         </p>
       )}
     </div>

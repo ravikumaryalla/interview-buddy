@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Square, RotateCcw, Timer } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 const DURATIONS = [15, 20, 30, 45, 60];
 
@@ -20,10 +22,7 @@ export const MockInterview: React.FC = () => {
     setRunning(r => !r);
   };
 
-  const reset = () => {
-    setRunning(false);
-    setTimeLeft(duration * 60);
-  };
+  const reset = () => { setRunning(false); setTimeLeft(duration * 60); };
 
   const changeDuration = (d: number) => {
     setDuration(d);
@@ -36,35 +35,45 @@ export const MockInterview: React.FC = () => {
   const urgent = timeLeft > 0 && timeLeft <= 300;
   const done = timeLeft === 0;
 
-  // Circular progress
   const R = 52;
   const CIRC = 2 * Math.PI * R;
   const dash = CIRC * pct;
 
+  const ringColor = done ? 'rgba(34,197,94,0.7)' : urgent ? 'rgba(239,68,68,0.85)' : 'url(#timerGradient)';
+
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-6 p-6 select-none">
+    <div className="flex flex-col items-center justify-center h-full gap-5 p-6 select-none">
 
       {/* Header */}
-      <div className="text-center">
-        <div className="flex items-center justify-center gap-2 text-foreground/60 mb-1">
-          <Timer size={16} className={urgent ? 'text-red-400' : 'text-accent'} />
-          <span className="text-sm font-medium">Mock Interview Timer</span>
+      <div className="text-center anim-fade-in">
+        <div className="flex items-center justify-center gap-2 text-foreground/65 mb-1">
+          <Timer size={15} className={urgent ? 'text-red-400' : 'text-accent'} />
+          <span className="text-sm font-semibold">Mock Interview Timer</span>
         </div>
-        <p className="text-xs text-foreground/35">Simulate real interview pressure</p>
+        <p className="text-xs text-foreground/30">Simulate real interview pressure</p>
       </div>
 
       {/* Circular timer */}
-      <div className="relative flex items-center justify-center">
-        <svg width="140" height="140" className="-rotate-90">
-          <circle cx="70" cy="70" r={R} fill="none" stroke="var(--border)" strokeWidth="6" />
+      <div className="relative flex items-center justify-center anim-scale-in">
+        <div className={`absolute inset-0 rounded-full transition-all duration-1000 ${running && !done ? 'opacity-100' : 'opacity-0'}`}
+          style={{ boxShadow: urgent ? '0 0 24px rgba(239,68,68,0.2)' : '0 0 24px var(--accent-glow)' }} />
+        <svg width="148" height="148" className="-rotate-90">
+          <defs>
+            <linearGradient id="timerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="hsl(var(--accent))" />
+              <stop offset="100%" stopColor="hsl(var(--accent-2))" />
+            </linearGradient>
+          </defs>
+          <circle cx="74" cy="74" r={R} fill="none" stroke="var(--border)" strokeWidth="7" />
           <circle
-            cx="70" cy="70" r={R}
+            cx="74" cy="74" r={R}
             fill="none"
-            stroke={done ? 'rgba(34,197,94,0.6)' : urgent ? 'rgba(239,68,68,0.8)' : 'hsl(var(--accent))'}
-            strokeWidth="6"
+            stroke={ringColor}
+            strokeWidth="7"
             strokeLinecap="round"
             strokeDasharray={`${dash} ${CIRC}`}
             className="transition-all duration-1000"
+            style={{ filter: running ? 'drop-shadow(0 0 4px hsl(var(--accent)/0.4))' : 'none' }}
           />
         </svg>
         <div className="absolute flex flex-col items-center">
@@ -72,49 +81,47 @@ export const MockInterview: React.FC = () => {
             ${done ? 'text-green-400' : urgent ? 'text-red-400' : 'text-foreground'}`}>
             {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
           </span>
-          {done && <span className="text-[10px] text-green-400 font-medium mt-0.5">Time's up!</span>}
+          {done    && <span className="text-[10px] text-green-400 font-semibold mt-0.5">Time's up!</span>}
           {running && !done && !urgent && <span className="text-[10px] text-foreground/30 mt-0.5">in progress</span>}
-          {urgent && running && <span className="text-[10px] text-red-400/70 mt-0.5 animate-pulse">hurry up!</span>}
+          {urgent  && running && <span className="text-[10px] text-red-400/70 mt-0.5 animate-pulse font-medium">hurry up!</span>}
         </div>
       </div>
 
       {/* Duration selector */}
       <div className="flex items-center gap-1.5">
         {DURATIONS.map(d => (
-          <button
+          <Button
             key={d}
             onClick={() => changeDuration(d)}
             disabled={running}
-            className={`w-10 h-8 rounded-lg text-xs font-medium transition-all
-              ${duration === d
-                ? 'bg-accent text-white shadow-sm shadow-accent/20'
-                : 'bg-panel border border-border text-foreground/50 hover:text-foreground disabled:opacity-40'}`}
+            variant={duration === d ? 'default' : 'outline'}
+            size="sm"
+            className={`w-10 h-8 px-0 text-xs ${duration === d ? '' : 'text-foreground/50'}`}
           >
             {d}m
-          </button>
+          </Button>
         ))}
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={reset}
-          className="p-2.5 rounded-xl bg-panel border border-border text-foreground/50 hover:text-foreground hover:bg-foreground/5 transition-colors"
-          title="Reset"
-        >
-          <RotateCcw size={16} />
-        </button>
-        <button
+      <div className="flex items-center gap-2.5">
+        <Button variant="outline" size="icon" onClick={reset} title="Reset" className="h-9 w-9">
+          <RotateCcw size={14} />
+        </Button>
+        <Button
           onClick={toggle}
-          className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm
-            ${running
-              ? 'bg-orange-500/15 text-orange-400 border border-orange-500/25 hover:bg-orange-500/20'
-              : 'bg-accent text-white hover:bg-accent/90 shadow-accent/20'}`}
+          variant={running ? 'secondary' : 'default'}
+          className={`px-7 h-9 ${running ? 'text-orange-400 bg-orange-500/10 border-orange-500/20 hover:bg-orange-500/15' : ''}`}
         >
-          {running ? <><Square size={14} /> Pause</> : <><Play size={14} /> {done ? 'Restart' : 'Start'}</>}
-        </button>
+          {running ? <><Square size={13} /> Pause</> : <><Play size={13} /> {done ? 'Restart' : 'Start'}</>}
+        </Button>
       </div>
 
+      {done && (
+        <Badge variant="success" className="anim-scale-in text-xs px-3 py-1">
+          Interview complete!
+        </Badge>
+      )}
     </div>
   );
 };

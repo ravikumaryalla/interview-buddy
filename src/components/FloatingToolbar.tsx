@@ -6,11 +6,13 @@ export const FloatingToolbar: React.FC<{ hideControls?: boolean }> = ({ hideCont
   const { opacity, isAlwaysOnTop, setOpacity, setAlwaysOnTop, theme, setTheme } = useAppStore();
 
   return (
-    <div className="drag-region flex items-center justify-between px-3 py-1.5 bg-panel/80 border-b border-border shrink-0">
+    <div className="drag-region flex items-center justify-between px-3 py-1.5 border-b border-border shrink-0"
+      style={{ background: 'var(--panel)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
+
       {/* Left: branding */}
       <div className="flex items-center gap-2">
-        <div className="w-2 h-2 rounded-full bg-accent opacity-80" />
-        <span className="text-[11px] font-semibold text-foreground/60 tracking-wide select-none">
+        <div className="w-2.5 h-2.5 rounded-full gradient-bg opacity-90" />
+        <span className="text-[11px] font-semibold text-foreground/55 tracking-wide select-none">
           Interview Buddy
         </span>
       </div>
@@ -19,9 +21,9 @@ export const FloatingToolbar: React.FC<{ hideControls?: boolean }> = ({ hideCont
       <div className="no-drag-region flex items-center gap-0.5">
         {!hideControls && (
           <>
-            {/* Opacity */}
+            {/* Opacity slider */}
             <div className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-foreground/5 transition-colors group">
-              <SlidersHorizontal size={11} className="text-foreground/30 group-hover:text-foreground/60 shrink-0" />
+              <SlidersHorizontal size={11} className="text-foreground/25 group-hover:text-foreground/55 shrink-0 transition-colors" />
               <input
                 type="range" min="0.2" max="1" step="0.05"
                 value={opacity}
@@ -36,18 +38,20 @@ export const FloatingToolbar: React.FC<{ hideControls?: boolean }> = ({ hideCont
             <button
               onClick={() => setAlwaysOnTop(!isAlwaysOnTop)}
               title={isAlwaysOnTop ? 'Always on top: ON' : 'Always on top: OFF'}
-              className={`p-1.5 rounded-md transition-colors
-                ${isAlwaysOnTop ? 'text-accent bg-accent/10' : 'text-foreground/40 hover:text-foreground/70 hover:bg-foreground/5'}`}
+              className={`p-1.5 rounded-md transition-all
+                ${isAlwaysOnTop
+                  ? 'text-accent bg-accent/10 shadow-[0_0_8px_hsl(var(--accent)/0.2)]'
+                  : 'text-foreground/35 hover:text-foreground/65 hover:bg-foreground/5'}`}
             >
-              {isAlwaysOnTop ? <Pin size={13} className="rotate-45" /> : <PinOff size={13} />}
+              {isAlwaysOnTop ? <Pin size={12} className="rotate-45" /> : <PinOff size={12} />}
             </button>
 
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               title="Toggle theme"
-              className="p-1.5 rounded-md text-foreground/40 hover:text-foreground/70 hover:bg-foreground/5 transition-colors"
+              className="p-1.5 rounded-md text-foreground/35 hover:text-foreground/65 hover:bg-foreground/5 transition-colors"
             >
-              {theme === 'dark' ? <Sun size={13} /> : <Moon size={13} />}
+              {theme === 'dark' ? <Sun size={12} /> : <Moon size={12} />}
             </button>
 
             <div className="w-px h-3 bg-border mx-1" />
@@ -56,15 +60,17 @@ export const FloatingToolbar: React.FC<{ hideControls?: boolean }> = ({ hideCont
 
         <button
           onClick={() => window.electronAPI.minimizeApp()}
-          className="p-1.5 rounded-md text-foreground/40 hover:text-foreground/70 hover:bg-foreground/5 transition-colors"
+          className="p-1.5 rounded-md text-foreground/35 hover:text-foreground/65 hover:bg-foreground/5 transition-colors"
+          title="Minimize"
         >
-          <Minus size={13} />
+          <Minus size={12} />
         </button>
         <button
           onClick={() => window.electronAPI.closeApp()}
-          className="p-1.5 rounded-md text-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          className="p-1.5 rounded-md text-foreground/35 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          title="Close"
         >
-          <X size={13} />
+          <X size={12} />
         </button>
       </div>
     </div>

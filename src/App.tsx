@@ -29,7 +29,6 @@ const App: React.FC = () => {
     initStore().then(() => setReady(true))
   }, [initStore])
 
-  // Handle token expiry from api.ts
   useEffect(() => {
     const onExpired = () => logout()
     window.addEventListener('auth:expired', onExpired)
@@ -39,9 +38,22 @@ const App: React.FC = () => {
   if (!ready) {
     return (
       <div className="h-full w-full bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-foreground/40">
-          <div className="w-6 h-6 rounded-full border-2 border-accent border-t-transparent animate-spin" />
-          <span className="text-xs">Loading…</span>
+        <div className="flex flex-col items-center gap-4 anim-fade-in">
+          <div className="w-11 h-11 rounded-2xl gradient-bg flex items-center justify-center glow-accent">
+            <Sparkles size={18} className="text-white" />
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex gap-1">
+              {[0, 0.15, 0.3].map((d, i) => (
+                <span
+                  key={i}
+                  className="w-1.5 h-1.5 rounded-full bg-accent/50 animate-bounce"
+                  style={{ animationDelay: `${d}s`, animationDuration: '0.9s' }}
+                />
+              ))}
+            </div>
+            <span className="text-[11px] text-foreground/30 font-medium">Loading Interview Buddy…</span>
+          </div>
         </div>
       </div>
     )
@@ -49,7 +61,8 @@ const App: React.FC = () => {
 
   if (!isAuthenticated) {
     return (
-      <div className="flex flex-col h-screen w-full bg-background text-foreground overflow-hidden rounded-xl border border-border shadow-2xl">
+      <div className="flex flex-col h-screen w-full bg-background text-foreground overflow-hidden rounded-xl border border-border"
+        style={{ boxShadow: 'var(--shadow-lg)' }}>
         <FloatingToolbar hideControls />
         <div className="flex-1 overflow-hidden">
           <AuthScreen />
@@ -59,13 +72,14 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen w-full bg-background text-foreground overflow-hidden rounded-xl border border-border shadow-2xl">
+    <div className="flex flex-col h-screen w-full bg-background text-foreground overflow-hidden rounded-xl border border-border"
+      style={{ boxShadow: 'var(--shadow-lg)' }}>
 
       {/* Title bar */}
       <FloatingToolbar />
 
       {/* Tab bar + credits */}
-      <div className="flex items-center bg-panel/60 border-b border-border no-drag-region shrink-0">
+      <div className="flex items-center bg-panel/80 border-b border-border no-drag-region shrink-0 backdrop-blur-sm">
         <div className="flex flex-1">
           {TABS.map(({ id, label, Icon }) => {
             const active = activeTab === id
@@ -73,21 +87,36 @@ const App: React.FC = () => {
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
-                className={`relative flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium transition-colors
-                  ${active ? 'text-accent' : 'text-foreground/40 hover:text-foreground/70'}`}
+                className={`relative flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 text-[10px] font-medium transition-all duration-200
+                  ${active
+                    ? 'text-accent'
+                    : 'text-foreground/40 hover:text-foreground/65 hover:bg-foreground/[0.03]'}`}
               >
-                <Icon size={15} strokeWidth={active ? 2.5 : 2} />
-                {label}
-                {active && <span className="absolute bottom-0 inset-x-3 h-0.5 bg-accent rounded-t-full" />}
+                {active && (
+                  <span className="absolute inset-0 bg-accent/[0.06] pointer-events-none" />
+                )}
+                <Icon
+                  size={14}
+                  strokeWidth={active ? 2.5 : 2}
+                  className={active ? 'drop-shadow-[0_0_5px_hsl(var(--accent)/0.5)]' : ''}
+                />
+                <span className="relative z-10">{label}</span>
+                {active && (
+                  <span className="absolute bottom-0 left-3 right-3 h-[2px] rounded-t-full"
+                    style={{ background: 'linear-gradient(90deg, transparent, hsl(var(--accent)), transparent)' }}
+                  />
+                )}
               </button>
             )
           })}
         </div>
 
         {/* Credits badge */}
-        <div className="flex items-center gap-1 pr-3 shrink-0">
-          <Coins size={11} className="text-accent/70" />
-          <span className="text-[10px] font-medium text-foreground/50">{credits}</span>
+        <div className="flex items-center gap-1 pr-2.5 shrink-0">
+          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-accent/8 border border-accent/15">
+            <Coins size={10} className="text-accent" />
+            <span className="text-[10px] font-semibold text-accent/80">{credits}</span>
+          </div>
         </div>
       </div>
 

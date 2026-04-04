@@ -8,6 +8,9 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useAppStore } from '../store/useAppStore';
 import { chatWithAI, transcribeAudio, getRealtimeToken } from '../lib/ai';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AutoTextarea } from '@/components/ui/auto-textarea';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Tab        = 'chat' | 'live';
@@ -272,18 +275,20 @@ export const VoiceInput: React.FC = () => {
     <div className="flex flex-col h-full">
 
       {/* Top tabs */}
-      <div className="flex border-b border-border shrink-0 bg-panel/40">
-        {([['chat', Bot, 'Chat'], ['live', Radio, 'Live Voice']] as const).map(([id, Icon, label]) => (
-          <button key={id} onClick={() => setTab(id as Tab)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors relative
-              ${tab === id ? 'text-accent' : 'text-foreground/40 hover:text-foreground/70'}`}>
-            <Icon size={13} /> {label}
-            {tab === id && <span className="absolute bottom-0 inset-x-4 h-0.5 bg-accent rounded-t-full" />}
-            {id === 'live' && liveStatus === 'connected' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse ml-0.5" />
-            )}
-          </button>
-        ))}
+      <div className="flex items-center justify-center border-b border-border shrink-0 bg-panel/60 backdrop-blur-sm px-3 py-2">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="w-full">
+          <TabsList className="w-full h-8">
+            <TabsTrigger value="chat" className="flex-1 h-7 text-xs gap-1.5">
+              <Bot size={12} /> Chat
+            </TabsTrigger>
+            <TabsTrigger value="live" className="flex-1 h-7 text-xs gap-1.5">
+              <Radio size={12} /> Live Voice
+              {liveStatus === 'connected' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shadow-[0_0_4px_rgba(74,222,128,0.5)]" />
+              )}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {/* ── CHAT TAB ───────────────────────────────────────────────────────── */}
@@ -313,9 +318,9 @@ export const VoiceInput: React.FC = () => {
           <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5 no-scrollbar min-h-0">
             {chatMsgs.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-4 select-none">
-                <div className="w-10 h-10 rounded-2xl bg-accent/10 flex items-center justify-center"><Bot size={20} className="text-accent" /></div>
+                <div className="w-11 h-11 rounded-2xl gradient-bg flex items-center justify-center glow-accent"><Bot size={18} className="text-white" /></div>
                 <div className="text-center">
-                  <p className="text-sm font-medium text-foreground/60">Ask me anything</p>
+                  <p className="text-sm font-semibold text-foreground/60">Ask me anything</p>
                   <p className="text-xs text-foreground/30 mt-0.5">Type, record via mic, or capture speaker output</p>
                 </div>
                 <div className="flex flex-wrap justify-center gap-1.5">
@@ -391,21 +396,37 @@ export const VoiceInput: React.FC = () => {
                 <span className="text-xs text-accent font-medium">Transcribing with Whisper…</span>
               </div>
             )}
-            <div className="flex items-center gap-2 bg-panel border border-border rounded-xl px-1 py-1">
-              <button onClick={isRecording ? stopRecording : () => startRecording(inputMode)} disabled={isTranscribing}
-                className={`p-2 rounded-lg transition-colors shrink-0 ${isRecording ? 'bg-red-500/15 text-red-400' : 'text-foreground/40 hover:text-foreground/70 hover:bg-foreground/5'}`}>
-                {isRecording ? <Square size={16} /> : inputMode === 'mic' ? <Mic size={16} /> : <Volume2 size={16} />}
-              </button>
-              <input type="text" value={transcript} onChange={e => setTranscript(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendChat(transcript)}
-                placeholder={isRecording ? 'Recording…' : isTranscribing ? 'Transcribing…' : 'Type a question…'}
-                disabled={isTranscribing}
-                className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-foreground/25 min-w-0 disabled:opacity-50" />
-              <button onClick={() => sendChat(transcript)} disabled={!transcript.trim() || isTyping || isTranscribing}
-                className="p-2 rounded-lg bg-accent text-white hover:bg-accent/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0">
-                <Send size={14} />
-              </button>
-            </div>
+            <AutoTextarea
+              value={transcript}
+              onChange={e => setTranscript(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  sendChat(transcript);
+                }
+              }}
+              placeholder={isRecording ? 'Recording…' : isTranscribing ? 'Transcribing…' : 'Type a question…'}
+              disabled={isTranscribing}
+              startAdornment={
+                <button
+                  onClick={isRecording ? stopRecording : () => startRecording(inputMode)}
+                  disabled={isTranscribing}
+                  className={`p-1.5 rounded-lg transition-colors ${isRecording ? 'bg-red-500/15 text-red-400' : 'text-foreground/40 hover:text-foreground/70 hover:bg-foreground/5'}`}
+                >
+                  {isRecording ? <Square size={15} /> : inputMode === 'mic' ? <Mic size={15} /> : <Volume2 size={15} />}
+                </button>
+              }
+              endAdornment={
+                <Button
+                  size="icon"
+                  onClick={() => sendChat(transcript)}
+                  disabled={!transcript.trim() || isTyping || isTranscribing}
+                  className="h-8 w-8"
+                >
+                  <Send size={13} />
+                </Button>
+              }
+            />
           </div>
         </div>
       )}
@@ -458,10 +479,9 @@ export const VoiceInput: React.FC = () => {
               </p>
 
               {liveStatus !== 'connecting' && (
-                <button onClick={connectLive}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent/90 transition-all shadow-sm shadow-accent/20 active:scale-[0.98]">
-                  <PhoneCall size={15} /> Start Live Session
-                </button>
+                <Button onClick={connectLive} className="px-6 h-9 gap-2">
+                  <PhoneCall size={14} /> Start Live Session
+                </Button>
               )}
             </div>
           ) : (
@@ -488,10 +508,9 @@ export const VoiceInput: React.FC = () => {
                       <Sparkles size={10} className="animate-pulse" /> AI
                     </span>
                   )}
-                  <button onClick={disconnectLive}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg hover:bg-red-500/15 transition-colors">
-                    <PhoneOff size={11} /> End
-                  </button>
+                  <Button variant="destructive" size="sm" onClick={disconnectLive} className="h-6 text-[11px] gap-1">
+                    <PhoneOff size={10} /> End
+                  </Button>
                 </div>
               </div>
 
