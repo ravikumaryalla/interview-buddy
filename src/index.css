@@ -212,6 +212,16 @@
   }
 }
 
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
 .anim-fade-in {
   animation: fadeIn 0.22s ease forwards;
 }

@@ -8,11 +8,5 @@ files:
   - "dist-electron/**/*"
 win:
   target:
-    - nsis
     - portable
-  artifactName: "${productName}-Setup-${version}.${ext}"
-nsis:
-  oneClick: false
-  perMachine: false
-  allowElevation: true
-  allowToChangeInstallationDirectory: true
+  artifactName: "${productName}-${version}.${ext}"

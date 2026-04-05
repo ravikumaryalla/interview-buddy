@@ -56,7 +56,8 @@ export const VoiceInput: React.FC = () => {
   const [liveStatus, setLiveStatus]     = useState<LiveStatus>('idle');
   const [liveError, setLiveError]       = useState('');
   const [liveMsgs, setLiveMsgs]         = useState<LiveMsg[]>([]);
-  const [streamingAI, setStreamingAI]   = useState('');
+  const [streamingAI, setStreamingAI]           = useState('');
+  const [streamingInterviewer, setStreamingInterviewer] = useState('');
   const [userSpeaking, setUserSpeaking] = useState(false);
   const [aiSpeaking, setAiSpeaking]     = useState(false);
 
@@ -67,7 +68,7 @@ export const VoiceInput: React.FC = () => {
   const liveBottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMsgs, isTyping]);
-  useEffect(() => { liveBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [liveMsgs, streamingAI]);
+  useEffect(() => { liveBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [liveMsgs, streamingAI, streamingInterviewer]);
 
   // ── Chat helpers ──────────────────────────────────────────────────────────
   const startRecording = async (src: AudioSrc) => {
@@ -137,7 +138,7 @@ export const VoiceInput: React.FC = () => {
 
   // ── Live Voice: connect ───────────────────────────────────────────────────
   const connectLive = useCallback(async () => {
-    setLiveStatus('connecting'); setLiveError(''); setLiveMsgs([]); setStreamingAI('');
+    setLiveStatus('connecting'); setLiveError(''); setLiveMsgs([]); setStreamingAI(''); setStreamingInterviewer('');
 
     try {
       // Get audio track
@@ -160,11 +161,8 @@ export const VoiceInput: React.FC = () => {
       const pc = new RTCPeerConnection();
       pcRef.current = pc;
 
-      // AI voice output element
-      const audioEl = document.createElement('audio');
-      audioEl.autoplay = true;
-      audioElRef.current = audioEl;
-      pc.ontrack = (e) => { audioEl.srcObject = e.streams[0]; };
+      // Suppress audio output — display text only
+      pc.ontrack = () => { /* intentionally ignore audio track */ };
 
       pc.addTrack(audioTrack);
 
@@ -181,11 +179,11 @@ export const VoiceInput: React.FC = () => {
         dc.send(JSON.stringify({
           type: 'session.update',
           session: {
-            modalities: isSysAudio ? ['text'] : ['text', 'audio'],
+            modalities: ['text'],
             instructions,
             voice: 'alloy',
             input_audio_transcription: { model: 'whisper-1' },
-            turn_detection: { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 700 },
+            turn_detection: { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 500 },
           },
         }));
         setLiveStatus('connected');
@@ -196,10 +194,13 @@ export const VoiceInput: React.FC = () => {
           const ev = JSON.parse(e.data);
           switch (ev.type) {
             case 'input_audio_buffer.speech_started':
-              setUserSpeaking(true); break;
+              setUserSpeaking(true); setStreamingInterviewer(''); break;
             case 'input_audio_buffer.speech_stopped':
               setUserSpeaking(false); break;
+            case 'conversation.item.input_audio_transcription.delta':
+              if (ev.delta) setStreamingInterviewer(p => p + ev.delta); break;
             case 'conversation.item.input_audio_transcription.completed':
+              setStreamingInterviewer('');
               if (ev.transcript?.trim()) setLiveMsgs(p => [...p, { id: uid(), role: 'user', text: ev.transcript.trim() }]);
               break;
             case 'response.created':
@@ -262,8 +263,7 @@ export const VoiceInput: React.FC = () => {
     dcRef.current?.close(); dcRef.current = null;
     pcRef.current?.close(); pcRef.current = null;
     localTrackRef.current?.stop(); localTrackRef.current = null;
-    if (audioElRef.current) { audioElRef.current.srcObject = null; audioElRef.current = null; }
-    setLiveStatus('idle'); setUserSpeaking(false); setAiSpeaking(false); setStreamingAI('');
+    setLiveStatus('idle'); setUserSpeaking(false); setAiSpeaking(false); setStreamingAI(''); setStreamingInterviewer('');
   }, []);
 
   useEffect(() => () => disconnectLive(), [disconnectLive]);
@@ -337,7 +337,7 @@ export const VoiceInput: React.FC = () => {
                     <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed
                       ${m.role === 'user' ? 'bg-accent text-white rounded-br-sm' : 'bg-panel border border-border text-foreground/80 rounded-bl-sm'}`}>
                       {m.role === 'user' ? m.content : (
-                        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-2 prose-pre:p-0 prose-pre:bg-transparent">
+                        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-4 prose-li:my-2 prose-headings:mt-4 prose-headings:mb-2 prose-pre:my-2 prose-pre:p-0 prose-pre:bg-transparent">
                           <ReactMarkdown
                             components={{
                               code({ className, children }) {
@@ -516,7 +516,7 @@ export const VoiceInput: React.FC = () => {
 
               {/* Transcript */}
               <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5 no-scrollbar min-h-0">
-                {liveMsgs.length === 0 && !streamingAI ? (
+                {liveMsgs.length === 0 && !streamingAI && !streamingInterviewer ? (
                   <div className="flex flex-col items-center justify-center h-full gap-3 text-foreground/25 select-none">
                     <AudioWaveform size={28} />
                     <p className="text-xs text-center">
@@ -533,16 +533,80 @@ export const VoiceInput: React.FC = () => {
                             : 'bg-panel border border-border text-foreground/80 rounded-bl-sm'}`}>
                           {m.role === 'user' && <span className="text-[10px] text-blue-400/60 block mb-0.5">{liveAudioSrc === 'system' ? 'Interviewer' : 'You'}</span>}
                           {m.role === 'ai' && <span className="text-[10px] text-accent/60 block mb-0.5 flex items-center gap-1"><Sparkles size={9} /> AI</span>}
-                          {m.text}
+                          {m.role === 'ai' ? (
+                            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-4 prose-li:my-2 prose-headings:mt-4 prose-headings:mb-2 prose-pre:my-2 prose-pre:p-0 prose-pre:bg-transparent">
+                              <ReactMarkdown
+                                components={{
+                                  code({ className, children }) {
+                                    const match = /language-(\w+)/.exec(className || '')
+                                    const code = toCodeString(children).replace(/\n$/, '')
+                                    return match ? (
+                                      <div className="rounded-lg overflow-hidden my-1.5">
+                                        <SyntaxHighlighter
+                                          language={match[1]}
+                                          style={vscDarkPlus}
+                                          PreTag="div"
+                                          customStyle={{ margin: 0, padding: '0.65rem 0.85rem', fontSize: '0.74rem', background: 'rgba(0,0,0,0.5)' }}
+                                        >
+                                          {code}
+                                        </SyntaxHighlighter>
+                                      </div>
+                                    ) : (
+                                      <code className="bg-black/25 px-1 py-0.5 rounded text-[0.8em] font-mono">{children}</code>
+                                    )
+                                  },
+                                }}
+                              >
+                                {m.text}
+                              </ReactMarkdown>
+                            </div>
+                          ) : m.text}
                         </div>
                       </div>
                     ))}
+                    {/* Streaming interviewer transcription */}
+                    {streamingInterviewer && (
+                      <div className="flex justify-end">
+                        <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-br-sm text-sm bg-blue-500/10 border border-blue-500/20 text-blue-300 leading-relaxed">
+                          <span className="text-[10px] text-blue-400/60 block mb-0.5 flex items-center gap-1">
+                            <Mic size={9} className="animate-pulse" /> {liveAudioSrc === 'system' ? 'Interviewer' : 'You'}
+                          </span>
+                          {streamingInterviewer}<span className="inline-block w-1 h-3.5 bg-blue-400/60 ml-0.5 animate-pulse rounded-sm" />
+                        </div>
+                      </div>
+                    )}
                     {/* Streaming AI response */}
                     {streamingAI && (
                       <div className="flex justify-start">
                         <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-bl-sm text-sm bg-panel border border-border text-foreground/80 leading-relaxed">
                           <span className="text-[10px] text-accent/60 block mb-0.5 flex items-center gap-1"><Sparkles size={9} /> AI</span>
-                          {streamingAI}<span className="inline-block w-1 h-3.5 bg-accent/60 ml-0.5 animate-pulse rounded-sm" />
+                          <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-4 prose-li:my-2 prose-headings:mt-4 prose-headings:mb-2 prose-pre:my-2 prose-pre:p-0 prose-pre:bg-transparent">
+                            <ReactMarkdown
+                              components={{
+                                code({ className, children }) {
+                                  const match = /language-(\w+)/.exec(className || '')
+                                  const code = toCodeString(children).replace(/\n$/, '')
+                                  return match ? (
+                                    <div className="rounded-lg overflow-hidden my-1.5">
+                                      <SyntaxHighlighter
+                                        language={match[1]}
+                                        style={vscDarkPlus}
+                                        PreTag="div"
+                                        customStyle={{ margin: 0, padding: '0.65rem 0.85rem', fontSize: '0.74rem', background: 'rgba(0,0,0,0.5)' }}
+                                      >
+                                        {code}
+                                      </SyntaxHighlighter>
+                                    </div>
+                                  ) : (
+                                    <code className="bg-black/25 px-1 py-0.5 rounded text-[0.8em] font-mono">{children}</code>
+                                  )
+                                },
+                              }}
+                            >
+                              {streamingAI}
+                            </ReactMarkdown>
+                          </div>
+                          <span className="inline-block w-1 h-3.5 bg-accent/60 ml-0.5 animate-pulse rounded-sm" />
                         </div>
                       </div>
                     )}

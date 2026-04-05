@@ -28,6 +28,7 @@ const createWindow = () => {
     frame: false, // Frameless window
     transparent: true,
     alwaysOnTop: isAlwaysOnTop,
+    skipTaskbar: true,
     icon: path.join(__dirname, '../public/interview_buddy_icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
