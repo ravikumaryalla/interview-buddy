@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { OPENAI_MODELS, isReasoningModel } from '../lib/ai';
 import type { ReasoningEffort } from '../lib/ai';
-import { Moon, Sun, Zap, Brain, Keyboard, LogOut, Coins, User, Activity, RefreshCw } from 'lucide-react';
+import { Moon, Sun, Zap, Brain, Keyboard, LogOut, Coins, User, Activity, RefreshCw, ShoppingCart } from 'lucide-react';
 import { api } from '../lib/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Slider } from '@/components/ui/slider';
+import { BuyCreditsDialog } from './BuyCreditsDialog';
 
 const Row: React.FC<{ label: React.ReactNode; children: React.ReactNode }> = ({ label, children }) => (
   <div className="flex items-center justify-between gap-4 py-3 border-b border-border last:border-0">
@@ -55,6 +56,7 @@ export const SettingsPanel: React.FC = () => {
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageError, setUsageError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'logs' | 'transactions'>('logs');
+  const [showBuyCredits, setShowBuyCredits] = useState(false);
 
   const loadUsage = async () => {
     setUsageLoading(true);
@@ -72,6 +74,8 @@ export const SettingsPanel: React.FC = () => {
   const showReasoning = isReasoningModel(selectedModel);
 
   return (
+    <>
+    {showBuyCredits && <BuyCreditsDialog onClose={() => setShowBuyCredits(false)} />}
     <div className="px-4 pb-8">
 
       {/* Account */}
@@ -84,9 +88,19 @@ export const SettingsPanel: React.FC = () => {
           <span className="text-xs text-foreground/45 font-mono">{user?.email}</span>
         </Row>
         <Row label={<span className="flex items-center gap-1.5"><Coins size={12} className="text-accent" /> Credits</span>}>
-          <Badge variant="accent">
-            <Coins size={9} /> {credits}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="accent">
+              <Coins size={9} /> {credits}
+            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowBuyCredits(true)}
+              className="h-6 text-[11px] gap-1 px-2 border-accent/40 text-accent hover:bg-accent/10 hover:border-accent"
+            >
+              <ShoppingCart size={9} /> Buy
+            </Button>
+          </div>
         </Row>
         <Row label="Session">
           <Button variant="destructive" size="sm" onClick={logout} className="h-7 text-xs gap-1.5">
@@ -303,5 +317,6 @@ export const SettingsPanel: React.FC = () => {
 
       <p className="text-center text-[10px] text-foreground/18 mt-8">Interview Buddy v1.0.0</p>
     </div>
+    </>
   );
 };

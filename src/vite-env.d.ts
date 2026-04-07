@@ -11,6 +11,9 @@ export interface IElectronAPI {
   storeGet: (key: string, defaultValue?: any) => Promise<any>;
   storeSet: (key: string, value: any) => Promise<void>;
   exportMarkdown: (filename: string, content: string) => Promise<boolean>;
+  openExternal: (url: string) => Promise<void>;
+  onPaymentSuccess: (callback: (data: { orderId: string }) => void) => void;
+  onPaymentFailed: (callback: (data: { orderId: string }) => void) => void;
   onShortcutCapture: (callback: () => void) => void;
   onOpacityChanged: (callback: (opacity: number) => void) => void;
   removeListeners: () => void;

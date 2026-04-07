@@ -132,6 +132,20 @@ export const api = {
       }>(`/api/user/usage?days=${days}`),
   },
 
+  billing: {
+    createOrder: (packId: string) =>
+      request<{ orderId: string; paymentSessionId: string; amount: number; currency: string }>('/api/billing/create-order', {
+        method: 'POST',
+        body: JSON.stringify({ packId }),
+      }),
+
+    verifyPayment: (orderId: string) =>
+      request<{ success: boolean; credits: number; balance: number; message: string }>('/api/billing/verify', {
+        method: 'POST',
+        body: JSON.stringify({ orderId }),
+      }),
+  },
+
   ai: {
     solve: (problem: string, model: string, reasoningEffort?: ReasoningEffort) =>
       request<AISolution>('/api/ai/solve', {

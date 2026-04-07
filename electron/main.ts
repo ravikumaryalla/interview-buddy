@@ -5,6 +5,7 @@ import {
   globalShortcut,
   screen as electronScreen,
   desktopCapturer,
+  shell,
 } from 'electron';
 import * as path from 'path';
 import Store from 'electron-store';
@@ -12,6 +13,15 @@ const screenshot = require('screenshot-desktop');
 import * as fs from 'fs';
 // Initialize the store for data persistence
 const store = new Store();
+
+// Register custom protocol for deep links (interviewbuddy://)
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('interviewbuddy', process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient('interviewbuddy');
+}
 
 // Store window reference
 let mainWindow: BrowserWindow | null = null;
@@ -98,6 +108,43 @@ app.whenReady().then(() => {
     }
   });
 });
+
+// Handle deep link on Windows (second instance)
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, commandLine) => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+      // The deep link URL is the last argument on Windows
+      const url = commandLine.find((arg) => arg.startsWith('interviewbuddy://'));
+      if (url) handleDeepLink(url);
+    }
+  });
+}
+
+// Handle deep link on macOS
+app.on('open-url', (_event, url) => {
+  handleDeepLink(url);
+});
+
+function handleDeepLink(url: string) {
+  try {
+    const parsed = new URL(url);
+    const orderId = parsed.searchParams.get('orderId');
+    if (!mainWindow || !orderId) return;
+
+    if (parsed.hostname === 'payment-success') {
+      mainWindow.webContents.send('payment:success', { orderId });
+    } else if (parsed.hostname === 'payment-failed') {
+      mainWindow.webContents.send('payment:failed', { orderId });
+    }
+  } catch {
+    // ignore malformed URLs
+  }
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -332,6 +379,10 @@ ipcMain.handle('toggle-always-on-top', (event, enable: boolean) => {
     return isAlwaysOnTop;
   }
   return false;
+});
+
+ipcMain.handle('open-external', (_, url: string) => {
+  shell.openExternal(url);
 });
 
 ipcMain.handle('close-app', () => {
