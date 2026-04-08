@@ -9,7 +9,6 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { api, getToken } from '../lib/api';
 import { useAppStore } from '../store/useAppStore';
 
@@ -22,7 +21,6 @@ interface CreditPack {
 }
 
 const CREDIT_PACKS: CreditPack[] = [
-  { id: 'test', credits: 50, price: 10, label: 'Test' },
   { id: 'starter', credits: 400, price: 399, label: 'Starter' },
   {
     id: 'popular',
@@ -68,7 +66,8 @@ export const BuyCreditsDialog: React.FC<Props> = ({ onClose }) => {
         })
         .catch((e: any) => {
           setErrorMsg(
-            e?.message ?? 'Verification failed. Contact support if payment was deducted.',
+            e?.message ??
+              'Verification failed. Contact support if payment was deducted.',
           );
           setVerifying(false);
         });

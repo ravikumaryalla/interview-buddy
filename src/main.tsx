@@ -40,6 +40,9 @@ if (!window.electronAPI) {
       console.log('Mock export', filename, content);
       return true;
     },
+    openExternal: async (url) => { window.open(url, '_blank'); },
+    onPaymentSuccess: () => {},
+    onPaymentFailed: () => {},
     onShortcutCapture: () => {},
     onOpacityChanged: () => {},
     removeListeners: () => {},
